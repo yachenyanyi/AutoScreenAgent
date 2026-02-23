@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug --no-daemon 2>&1 | head -100)",
+      "Bash(adb logcat -d | grep -iE \"screenshot|mediaprojection|foreground\" | tail -50)",
+      "Bash(./gradlew assembleDebug && adb install -r /home/wt/android_development/app/build/outputs/apk/debug/app-debug.apk)",
+      "Bash(adb logcat -d | grep -E \"MainActivity|ScreenshotForegroundService|screenshot\" | tail -60)",
+      "Bash(adb logcat -c && echo \"Log cleared\")",
+      "Bash(adb logcat -d | grep -E \"MainActivity|ScreenshotForegroundService|ScreenshotManager\" | tail -80)",
+      "Bash(./gradlew assembleDebug 2>&1 | head -100)"
+    ]
+  }
+}

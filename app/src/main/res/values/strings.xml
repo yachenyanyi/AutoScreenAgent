@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">My Application</string>
+    <string name="accessibility_service_description">
+        此服务用于模拟用户操作，执行点击、输入、滑动等手势。
+        请仅在受信任的设备上使用此功能。
+    </string>
+</resources>
