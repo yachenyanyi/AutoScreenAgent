@@ -1,4 +1,4 @@
-package com.example.myapplication.accessibility
+package com.example.autoscreenagent.accessibility
 
 import android.graphics.Rect
 import org.json.JSONArray

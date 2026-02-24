@@ -1,4 +1,4 @@
-package com.example.myapplication.accessibility
+package com.example.autoscreenagent.accessibility
 
 import android.content.Context
 import android.content.Intent
@@ -15,7 +15,7 @@ import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import android.view.WindowManager
-import com.example.myapplication.service.ScreenshotForegroundService
+import com.example.autoscreenagent.service.ScreenshotForegroundService
 
 /**
  * 截屏管理器

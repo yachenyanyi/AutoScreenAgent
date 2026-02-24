@@ -1,11 +1,13 @@
-package com.example.myapplication.ai
+package com.example.autoscreenagent.ai
 
 import android.content.Context
 import android.util.Log
-import com.example.myapplication.accessibility.AccessibilityManager
-import com.example.myapplication.accessibility.ActionExecutor
-import com.example.myapplication.accessibility.CoordinateExecutor
-import com.example.myapplication.accessibility.MyAccessibilityService
+import com.example.autoscreenagent.accessibility.AccessibilityManager
+import com.example.autoscreenagent.accessibility.ActionExecutor
+import com.example.autoscreenagent.accessibility.CoordinateExecutor
+import com.example.autoscreenagent.accessibility.MyAccessibilityService
+import com.example.autoscreenagent.accessibility.ScreenshotManager
+import com.example.autoscreenagent.accessibility.ScreenContentUtils
 import kotlinx.coroutines.delay
 
 /**
@@ -35,14 +37,14 @@ class CommandExecutor(private val context: Context) {
     /**
      * 执行 AI 响应
      */
-    suspend fun execute(response: AIResponse): List<String> {
-        val results = mutableListOf<String>()
+    suspend fun execute(response: AIResponse): List<ExecuteResult> {
+        val results = mutableListOf<ExecuteResult>()
 
         Log.d(TAG, "开始执行 AI 响应，mode=${response.mode}, actions=${response.actions.size}")
         Log.d(TAG, "思考过程：${response.thought}")
 
         // 输出思考过程
-        results.add("【AI 思考】${response.thought}")
+        results.add(ExecuteResult.success("【AI 思考】${response.thought}"))
 
         // 初始化执行器
         initExecutors()
@@ -54,7 +56,7 @@ class CommandExecutor(private val context: Context) {
             val executableAction = actionCommand.toExecutableAction()
             if (executableAction == null) {
                 Log.w(TAG, "行动 ${actionCommand.action} 无法执行，跳过")
-                results.add("❌ 行动 ${actionCommand.action}: 无法解析")
+                results.add(ExecuteResult.failure("❌ 行动 ${actionCommand.action}: 无法解析"))
                 continue
             }
 
@@ -63,7 +65,7 @@ class CommandExecutor(private val context: Context) {
             val result = executeAction(executableAction)
             listener?.onActionComplete(executableAction, result.success, result.message)
 
-            results.add(result.message)
+            results.add(result)
 
             // 行动间隔延迟
             if (index < response.actions.size - 1) {
@@ -71,7 +73,7 @@ class CommandExecutor(private val context: Context) {
             }
         }
 
-        listener?.onAllComplete(results.all { it.startsWith("✅") || it.startsWith("【") }, results)
+        listener?.onAllComplete(results.all { it.success }, results.map { it.message })
         return results
     }
 
@@ -83,7 +85,7 @@ class CommandExecutor(private val context: Context) {
             // 无障碍模式
             is ExecutableAction.TapByElement -> {
                 val success = AccessibilityManager.tapByText(action.text)
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 点击文本 '${action.text}'")
                 } else {
                     ExecuteResult.failure("❌ 点击文本 '${action.text}' 失败")
@@ -92,7 +94,7 @@ class CommandExecutor(private val context: Context) {
 
             is ExecutableAction.TapById -> {
                 val success = AccessibilityManager.tapById(action.viewId)
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 点击 ID '${action.viewId}'")
                 } else {
                     ExecuteResult.failure("❌ 点击 ID '${action.viewId}' 失败")
@@ -101,7 +103,7 @@ class CommandExecutor(private val context: Context) {
 
             is ExecutableAction.TypeText -> {
                 val success = AccessibilityManager.typeText(action.text)
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 输入文本 '${action.text}'")
                 } else {
                     ExecuteResult.failure("❌ 输入文本 '${action.text}' 失败")
@@ -115,7 +117,7 @@ class CommandExecutor(private val context: Context) {
 
             is ExecutableAction.Back -> {
                 val success = AccessibilityManager.back()
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 返回")
                 } else {
                     ExecuteResult.failure("❌ 返回失败")
@@ -124,10 +126,50 @@ class CommandExecutor(private val context: Context) {
 
             is ExecutableAction.Home -> {
                 val success = AccessibilityManager.home()
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 回到主屏幕")
                 } else {
                     ExecuteResult.failure("❌ 回到主屏幕失败")
+                }
+            }
+
+            is ExecutableAction.LaunchApp -> {
+                val success = AccessibilityManager.launchAppDirect(context, action.packageName)
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
+                    ExecuteResult.success("✅ 启动应用 '${action.packageName}'")
+                } else {
+                    ExecuteResult.failure("❌ 启动应用 '${action.packageName}' 失败")
+                }
+            }
+
+            is ExecutableAction.Finish -> {
+                ExecuteResult.success("🎉 ${action.message}")
+            }
+
+            // 截屏操作
+            is ExecutableAction.CaptureScreenshot -> {
+                val screenshotManager = ScreenshotManager.getInstance()
+                val base64 = screenshotManager.captureToBase64(context)
+                if (base64 != null) {
+                    Log.d(TAG, "截屏成功，Base64 长度：${base64.length}")
+                    ExecuteResult.success("✅ 截屏成功，图像已保存为 Base64（${base64.length} 字符）")
+                } else {
+                    Log.e(TAG, "截屏失败：未授权或错误")
+                    ExecuteResult.failure("❌ 截屏失败：请确保已授权截屏服务")
+                }
+            }
+
+            // 获取屏幕内容（无障碍 UI 树）
+            is ExecutableAction.GetScreenContent -> {
+                val screenInfo = AccessibilityManager.getScreenContent()
+                if (screenInfo != null) {
+                    val screenDescription = ScreenContentUtils.toFormattedString(screenInfo, maxDepth = 15)
+                    Log.d(TAG, "获取屏幕内容成功，节点数：${screenInfo.nodeCount}")
+                    // 返回特殊格式，包含实际内容
+                    ExecuteResult.screenContent("✅ 已获取屏幕内容:\n$screenDescription")
+                } else {
+                    Log.e(TAG, "获取屏幕内容失败：无障碍服务未启用")
+                    ExecuteResult.failure("❌ 获取屏幕内容失败：请确保已启用无障碍服务")
                 }
             }
 
@@ -152,7 +194,7 @@ class CommandExecutor(private val context: Context) {
                 delay(200)
                 // 然后输入文本
                 val success = AccessibilityManager.typeText(action.text)
-                if (success is com.example.myapplication.accessibility.ActionResult.Success) {
+                if (success is com.example.autoscreenagent.accessibility.ActionResult.Success) {
                     ExecuteResult.success("✅ 输入 '${action.text}'")
                 } else {
                     ExecuteResult.failure("❌ 输入 '${action.text}' 失败")
@@ -192,10 +234,10 @@ class CommandExecutor(private val context: Context) {
             "down" -> executor.swipeDown()
             "left" -> executor.swipeLeft()
             "right" -> executor.swipeRight()
-            else -> com.example.myapplication.accessibility.ActionResult.Failure("未知方向：$direction")
+            else -> com.example.autoscreenagent.accessibility.ActionResult.Failure("未知方向：$direction")
         }
 
-        return if (result is com.example.myapplication.accessibility.ActionResult.Success) {
+        return if (result is com.example.autoscreenagent.accessibility.ActionResult.Success) {
             "✅ 向$direction 滑动"
         } else {
             "❌ 向$direction 滑动失败"
@@ -223,11 +265,15 @@ class CommandExecutor(private val context: Context) {
      */
     data class ExecuteResult(
         val success: Boolean,
-        val message: String
+        val message: String,
+        val isScreenContent: Boolean = false  // 标记是否包含屏幕内容
     ) {
         companion object {
             fun success(message: String) = ExecuteResult(true, message)
             fun failure(message: String) = ExecuteResult(false, message)
+            fun screenContent(message: String) = ExecuteResult(true, message, isScreenContent = true)
         }
+
+        override fun toString(): String = message
     }
 }

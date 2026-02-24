@@ -1,4 +1,4 @@
-package com.example.myapplication.util
+package com.example.autoscreenagent.util
 
 import android.content.Context
 import android.content.pm.ApplicationInfo

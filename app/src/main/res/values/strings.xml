@@ -1,7 +1,36 @@
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">AutoScreenAgent</string>
+
+    <!-- 无障碍服务 -->
     <string name="accessibility_service_description">
         此服务用于模拟用户操作，执行点击、输入、滑动等手势。
         请仅在受信任的设备上使用此功能。
     </string>
+    <string name="accessibility_service_name">AutoScreenAgent 无障碍服务</string>
+
+    <!-- 通用 -->
+    <string name="ok">确定</string>
+    <string name="cancel">取消</string>
+    <string name="settings">设置</string>
+    <string name="start">开始</string>
+    <string name="stop">停止</string>
+    <string name="error">错误</string>
+    <string name="success">成功</string>
+
+    <!-- 权限 -->
+    <string name="permission_accessibility_required">需要无障碍服务权限</string>
+    <string name="permission_accessibility_denied">无障碍服务权限被拒绝</string>
+
+    <!-- 设置 -->
+    <string name="settings_server_url">服务器地址</string>
+    <string name="settings_assistant_id">Assistant ID</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_test_connection">测试连接</string>
+
+    <!-- 状态 -->
+    <string name="status_connected">已连接</string>
+    <string name="status_disconnected">未连接</string>
+    <string name="status_running">运行中</string>
+    <string name="status_stopped">已停止</string>
+    <string name="status_idle">空闲</string>
 </resources>

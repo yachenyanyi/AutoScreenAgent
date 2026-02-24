@@ -1,4 +1,4 @@
-package com.example.myapplication.accessibility
+package com.example.autoscreenagent.accessibility
 
 /**
  * 动作执行结果

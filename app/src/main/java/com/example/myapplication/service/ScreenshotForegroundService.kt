@@ -1,4 +1,4 @@
-package com.example.myapplication.service
+package com.example.autoscreenagent.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -16,8 +16,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.myapplication.MainActivity
-import com.example.myapplication.R
+import com.example.autoscreenagent.MainActivity
+import com.example.autoscreenagent.R
 
 /**
  * 截屏前台服务
@@ -162,7 +162,7 @@ class ScreenshotForegroundService : Service() {
             if (projection != null) {
                 Log.d(TAG, "MediaProjection acquired successfully!")
                 // 将 projection 传递给 ScreenshotManager
-                com.example.myapplication.accessibility.ScreenshotManager.setMediaProjectionFromService(projection)
+                com.example.autoscreenagent.accessibility.ScreenshotManager.setMediaProjectionFromService(projection)
                 sendAuthorizationResult(true)
             } else {
                 Log.e(TAG, "getMediaProjection returned null")
@@ -178,7 +178,7 @@ class ScreenshotForegroundService : Service() {
      * 发送授权结果广播
      */
     private fun sendAuthorizationResult(success: Boolean) {
-        val broadcastIntent = Intent("com.example.myapplication.MEDIA_PROJECTION_AUTH_RESULT").apply {
+        val broadcastIntent = Intent("com.example.autoscreenagent.MEDIA_PROJECTION_AUTH_RESULT").apply {
             putExtra("success", success)
             setPackage(packageName)
         }

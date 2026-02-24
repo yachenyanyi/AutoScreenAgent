@@ -1,4 +1,4 @@
-package com.example.myapplication.accessibility
+package com.example.autoscreenagent.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription

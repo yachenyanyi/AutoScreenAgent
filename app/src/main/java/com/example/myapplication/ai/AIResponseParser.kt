@@ -1,13 +1,10 @@
-package com.example.myapplication.ai
+package com.example.autoscreenagent.ai
 
+import android.util.Log
 import org.json.JSONObject
 
 /**
  * AI 返回的行动命令
- *
- * 支持两种模式：
- * 1. accessibility - 使用无障碍 API（tap_by_text, tap_by_id 等）
- * 2. screenshot - 使用坐标点击（Tap [x, y]）
  */
 data class ActionCommand(
     val action: String,
@@ -20,16 +17,7 @@ data class ActionCommand(
     /**
      * 判断是否应该执行此命令
      */
-    fun shouldExecute(): Boolean = _metadata == "do"
-
-    /**
-     * 获取操作模式
-     */
-    fun getMode(): ActionMode = when (action.lowercase()) {
-        "tap_by_text", "tap_by_id", "type_text", "system_back", "system_home", "swipe" -> ActionMode.ACCESSIBILITY
-        "tap", "swipe", "type", "longpress", "back", "home", "scroll", "inputtext" -> ActionMode.SCREENSHOT
-        else -> ActionMode.UNKNOWN
-    }
+    fun shouldExecute(): Boolean = _metadata == "do" || _metadata == "finish"
 
     /**
      * 转换为可执行的 Action 对象
@@ -38,77 +26,63 @@ data class ActionCommand(
         if (!shouldExecute()) return null
 
         return when (action.lowercase()) {
-            // 无障碍模式
+            "finish" -> ExecutableAction.Finish(message = text ?: params?.text ?: "任务完成")
             "tap_by_text" -> ExecutableAction.TapByElement(text = params?.text ?: return null)
             "tap_by_id" -> ExecutableAction.TapById(viewId = params?.viewId ?: return null)
             "type_text" -> ExecutableAction.TypeText(text = params?.text ?: return null)
             "system_back" -> ExecutableAction.Back
             "system_home" -> ExecutableAction.Home
-            "swipe" -> ExecutableAction.Swipe(direction = params?.direction ?: "up")
-
-            // 截图坐标模式
+            "launch_app", "launch" -> {
+                val packageName = text ?: params?.text ?: return null
+                ExecutableAction.LaunchApp(packageName = packageName)
+            }
+            "swipe" -> {
+                if (params?.direction != null) {
+                    ExecutableAction.Swipe(direction = params.direction)
+                } else if (element != null && element.size >= 4) {
+                    ExecutableAction.SwipeCoords(
+                        startX = element[0], startY = element[1],
+                        endX = element[2], endY = element[3],
+                        duration = duration ?: 300
+                    )
+                } else {
+                    ExecutableAction.Swipe(direction = params?.direction ?: "up")
+                }
+            }
             "tap" -> {
                 val coords = element ?: return null
                 if (coords.size >= 2) ExecutableAction.TapCoords(x = coords[0], y = coords[1])
                 else null
             }
             "type", "inputtext" -> {
-                val coords = element
                 val inputText = text ?: params?.text ?: return null
-                if (coords?.size == 2) {
-                    ExecutableAction.TapAndType(x = coords[0], y = coords[1], text = inputText)
+                if (element?.size == 2) {
+                    ExecutableAction.TapAndType(x = element[0], y = element[1], text = inputText)
                 } else {
                     ExecutableAction.TypeText(text = inputText)
-                }
-            }
-            "swipe" -> {
-                val coords = element ?: return null
-                if (coords.size >= 4) {
-                    ExecutableAction.SwipeCoords(
-                        startX = coords[0],
-                        startY = coords[1],
-                        endX = coords[2],
-                        endY = coords[3],
-                        duration = duration ?: 300
-                    )
-                } else if (coords.size == 1 && coords[0] in -1..4) {
-                    // direction 数组
-                    val directionMap = listOf("up", "down", "left", "right")
-                    val direction = if (coords[0] >= 0 && coords[0] < directionMap.size) {
-                        directionMap[coords[0]]
-                    } else "up"
-                    ExecutableAction.Swipe(direction = direction)
-                } else {
-                    null
                 }
             }
             "longpress" -> {
                 val coords = element ?: return null
                 if (coords.size >= 2) {
-                    ExecutableAction.LongPress(
-                        x = coords[0],
-                        y = coords[1],
-                        duration = duration ?: 500
-                    )
+                    ExecutableAction.LongPress(x = coords[0], y = coords[1], duration = duration ?: 500)
                 } else null
             }
-            "back" -> ExecutableAction.Back
-            "home" -> ExecutableAction.Home
             "scroll" -> {
                 val direction = params?.direction ?: element?.firstOrNull()?.let {
                     listOf("up", "down", "left", "right").getOrNull(it) ?: "up"
                 } ?: "up"
                 ExecutableAction.Swipe(direction = direction)
             }
-
+            "back" -> ExecutableAction.Back
+            "home" -> ExecutableAction.Home
+            "capture_screenshot", "screenshot", "take_screenshot" -> ExecutableAction.CaptureScreenshot
+            "get_screen_content", "get_ui_tree", "get_screen_tree" -> ExecutableAction.GetScreenContent
             else -> null
         }
     }
 }
 
-/**
- * 行动参数
- */
 data class ActionParams(
     val text: String?,
     val viewId: String?,
@@ -116,154 +90,144 @@ data class ActionParams(
     val coords: List<Int>?
 )
 
-/**
- * 操作模式
- */
-enum class ActionMode {
-    ACCESSIBILITY,
-    SCREENSHOT,
-    UNKNOWN
-}
+enum class ActionMode { ACCESSIBILITY, SCREENSHOT, UNKNOWN }
 
-/**
- * 可执行的行动
- */
 sealed class ExecutableAction {
-    // 无障碍模式
     data class TapByElement(val text: String) : ExecutableAction()
     data class TapById(val viewId: String) : ExecutableAction()
     data class TypeText(val text: String) : ExecutableAction()
     data class Swipe(val direction: String) : ExecutableAction()
-
-    // 坐标模式
+    data class LaunchApp(val packageName: String) : ExecutableAction()
     data class TapCoords(val x: Int, val y: Int) : ExecutableAction()
     data class TapAndType(val x: Int, val y: Int, val text: String) : ExecutableAction()
     data class SwipeCoords(val startX: Int, val startY: Int, val endX: Int, val endY: Int, val duration: Int) : ExecutableAction()
     data class LongPress(val x: Int, val y: Int, val duration: Int) : ExecutableAction()
-
-    // 通用
+    object CaptureScreenshot : ExecutableAction()
+    object GetScreenContent : ExecutableAction()
     object Back : ExecutableAction()
     object Home : ExecutableAction()
+    data class Finish(val message: String) : ExecutableAction()
 }
+
+data class AIResponse(
+    val thought: String,
+    val mode: ActionMode,
+    val actions: List<ActionCommand>
+)
 
 /**
  * AI 响应解析器
  */
 object AIResponseParser {
+    private const val TAG = "AIResponseParser"
 
     /**
      * 解析 AI 返回的 JSON
+     *
+     * 支持的 LangGraph 格式：
+     * - values 事件：{"messages": [{"content": "{\"action\": \"...\"}"}]}
+     * - updates 事件：{"model": {"messages": [{"content": "{\"action\": \"...\"}"}]}}
      */
     fun parse(jsonString: String): AIResponse? {
         return try {
             val json = JSONObject(jsonString)
-            val thought = json.optString("thought", "")
-            val mode = json.optString("mode", "unknown")
-            val actionsArray = json.optJSONArray("actions")
 
-            val actions = mutableListOf<ActionCommand>()
-            if (actionsArray != null) {
-                for (i in 0 until actionsArray.length()) {
-                    val actionJson = actionsArray.getJSONObject(i)
-                    actions.add(parseAction(actionJson))
-                }
+            // 1. 查找 messages 数组（可能在根级别或 model 对象中）
+            var messagesArray = json.optJSONArray("messages")
+            if (messagesArray == null) {
+                messagesArray = json.optJSONObject("model")?.optJSONArray("messages")
             }
 
-            AIResponse(
-                thought = thought,
-                mode = when (mode) {
-                    "accessibility" -> ActionMode.ACCESSIBILITY
-                    "screenshot" -> ActionMode.SCREENSHOT
-                    else -> ActionMode.UNKNOWN
-                },
-                actions = actions
-            )
+            // 2. 从消息中提取 actions
+            val actions = mutableListOf<ActionCommand>()
+            var thought = ""
+
+            if (messagesArray != null) {
+                // 从最后一个消息提取（包含最新 AI 响应）
+                val lastMessage = messagesArray.getJSONObject(messagesArray.length() - 1)
+                extractActionsFromMessage(lastMessage, actions)
+                thought = lastMessage.optJSONObject("additional_kwargs")?.optString("thought", "") ?: ""
+            }
+
+            // 3. 如果没有找到 actions，尝试从根级别解析
+            if (actions.isEmpty()) {
+                extractActionsFromMessage(json, actions)
+            }
+
+            Log.d(TAG, "解析到 ${actions.size} 个 actions")
+            actions.forEachIndexed { i, action ->
+                Log.d(TAG, "  [$i] ${action.action}, metadata=${action._metadata}")
+            }
+
+            AIResponse(thought = thought, mode = ActionMode.UNKNOWN, actions = actions)
         } catch (e: Exception) {
+            Log.e(TAG, "解析失败：${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * 从消息对象中提取 actions
+     */
+    private fun extractActionsFromMessage(msg: JSONObject, actions: MutableList<ActionCommand>) {
+        // 尝试从 additional_kwargs.actions 数组提取
+        val additionalKwargs = msg.optJSONObject("additional_kwargs")
+        val actionsArray = additionalKwargs?.optJSONArray("actions")
+        if (actionsArray != null) {
+            for (i in 0 until actionsArray.length()) {
+                actions.add(parseAction(actionsArray.getJSONObject(i)))
+            }
+            return
+        }
+
+        // 尝试从 content 字段提取（JSON 字符串）
+        val contentStr = msg.optString("content", null)
+        if (contentStr != null) {
+            try {
+                val contentJson = JSONObject(contentStr)
+                val action = contentJson.optString("action", "")
+                if (action.isNotEmpty()) {
+                    actions.add(parseAction(contentJson))
+                    return
+                }
+            } catch (e: Exception) {
+                // content 不是 JSON
+            }
+        }
+
+        // 尝试直接从消息对象提取
+        if (msg.optString("action", "").isNotEmpty()) {
+            actions.add(parseAction(msg))
         }
     }
 
     /**
      * 解析单个行动命令
      */
-    private fun parseAction(json: JSONObject): ActionCommand {
+    fun parseAction(json: JSONObject): ActionCommand {
         val action = json.optString("action", "")
         val _metadata = json.optString("_metadata", "")
 
-        // 解析 params 对象
         val params = json.optJSONObject("params")?.let { paramsJson ->
             ActionParams(
-                text = paramsJson.optString("text", null),
-                viewId = paramsJson.optString("viewId", null),
-                direction = paramsJson.optString("direction", null),
+                text = paramsJson.optString("text").takeIf { it.isNotEmpty() },
+                viewId = paramsJson.optString("viewId").takeIf { it.isNotEmpty() },
+                direction = paramsJson.optString("direction").takeIf { it.isNotEmpty() },
                 coords = null
             )
         }
 
-        // 解析 element 数组
         val element = json.optJSONArray("element")?.let { arr ->
             mutableListOf<Int>().apply {
-                for (i in 0 until arr.length()) {
-                    add(arr.getInt(i))
-                }
+                for (i in 0 until arr.length()) add(arr.getInt(i))
             }
         }
 
-        // 解析 text 字段
-        val text = json.optString("text", null).takeIf { it != null }
+        val text = json.optString("text").takeIf { it.isNotEmpty() }
+            ?: json.optString("message").takeIf { it.isNotEmpty() }
 
-        // 解析 duration 字段
         val duration = json.optInt("duration", 0).takeIf { it > 0 }
 
-        return ActionCommand(
-            action = action,
-            params = params,
-            element = element,
-            text = text,
-            duration = duration,
-            _metadata = _metadata
-        )
-    }
-
-    /**
-     * 从混合内容中提取 JSON（处理 AI 返回的思考过程 + JSON）
-     */
-    fun extractJsonFromContent(content: String): String? {
-        // 尝试查找 ```json ... ``` 代码块
-        val codeBlockRegex = """```json\s*(.+?)\s*```""".toRegex(RegexOption.DOT_MATCHES_ALL)
-        val codeBlockMatch = codeBlockRegex.find(content)
-        if (codeBlockMatch != null) {
-            return codeBlockMatch.groupValues[1]
-        }
-
-        // 尝试查找 ``` ... ``` 代码块（没有 json 标记）
-        val genericCodeBlockRegex = """```\s*(\{.+?\})\s*```""".toRegex(RegexOption.DOT_MATCHES_ALL)
-        val genericMatch = genericCodeBlockRegex.find(content)
-        if (genericMatch != null) {
-            return genericMatch.groupValues[1]
-        }
-
-        // 尝试直接解析整个内容为 JSON
-        return try {
-            JSONObject(content.trim())
-            content.trim()
-        } catch (e: Exception) {
-            // 尝试查找最后一个 JSON 对象
-            val lastJsonStart = content.lastIndexOf('{')
-            if (lastJsonStart >= 0) {
-                content.substring(lastJsonStart).trim()
-            } else {
-                null
-            }
-        }
+        return ActionCommand(action, params, element, text, duration, _metadata)
     }
 }
-
-/**
- * AI 响应
- */
-data class AIResponse(
-    val thought: String,
-    val mode: ActionMode,
-    val actions: List<ActionCommand>
-)
