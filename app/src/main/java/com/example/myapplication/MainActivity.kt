@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.example.autoscreenagent.accessibility.*
@@ -86,6 +88,7 @@ fun MainScreen(
  * 消息数据类
  */
 data class ChatMessage(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val content: String,
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis()
@@ -173,6 +176,63 @@ fun ChatScreen(
 
     fun appendLog(msg: String) {
         messages = messages + ChatMessage(content = msg, isUser = false)
+    }
+
+    // 启动 Agent 的函数
+    fun launchAgent(goal: String) {
+        isAgentRunning = true
+        agentStatus = "分析中..."
+        scope.launch {
+            runAgentLoop(
+                goal = goal,
+                langGraphClient = langGraphClient,
+                screenshotManager = screenshotManager,
+                commandExecutor = commandExecutor,
+                onLog = { msg ->
+                    msg.lines().forEach { line ->
+                        if (line.isNotBlank()) {
+                            addMessage(line, isUser = false)
+                        }
+                    }
+                },
+                onStatus = { status ->
+                    agentStatus = status
+                },
+                onComplete = {
+                    isAgentRunning = false
+                    agentStatus = "就绪"
+                    addMessage("任务完成！还有什么可以帮你的吗？", isUser = false)
+                }
+            )
+        }
+    }
+
+    // 监听悬浮窗任务广播
+    DisposableEffect(Unit) {
+        val taskReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    "com.example.autoscreenagent.FLOATING_WINDOW_TASK" -> {
+                        val taskText = intent.getStringExtra("task_text") ?: ""
+                        if (taskText.isNotBlank() && !isAgentRunning) {
+                            addMessage(taskText, isUser = true)
+                            launchAgent(taskText)
+                        }
+                    }
+                    "com.example.autoscreenagent.FLOATING_WINDOW_STOP" -> {
+                        isAgentRunning = false
+                        agentStatus = "已停止"
+                        addMessage("任务已停止", isUser = false)
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction("com.example.autoscreenagent.FLOATING_WINDOW_TASK")
+            addAction("com.example.autoscreenagent.FLOATING_WINDOW_STOP")
+        }
+        ContextCompat.registerReceiver(context, taskReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(taskReceiver) }
     }
 
     // 使用 Scaffold 包裹整个页面
@@ -341,7 +401,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(messages, key = { it.timestamp }) { message ->
+                    items(messages, key = { it.id }) { message ->
                         ChatMessageBubble(message = message)
                     }
                 }
@@ -673,6 +733,7 @@ suspend fun runAgentLoop(
     var iteration = 0
     var taskCompleted = false
     var lastActionResults = mutableListOf<String>()
+    var lastScreenshotBase64: String? = null  // 保存上一次截屏的 Base64
 
     try {
         while (!taskCompleted && iteration < maxIterations) {
@@ -706,21 +767,60 @@ $feedbackContent
 
             onLog("发送消息给 AI...")
 
-            // 收集 AI 响应 - 只保留最后一个有效的 updates/values 事件
-            val responseFlow = langGraphClient.sendMessage(message, null)
+            // 收集 AI 响应 - 拼接所有流式 chunk
+            // 如果有截屏图像，一起发送给 AI
+            val responseFlow = langGraphClient.sendMessage(message, lastScreenshotBase64)
             var lastValidResponse = ""
+            var fullContent = StringBuilder()
+            var lastAdditionalKwargs: String? = null
 
             responseFlow.collect { chunk ->
-                onLog("收到：${chunk.take(80)}...")
+                Log.d("LangGraph", "收到响应 chunk: ${chunk.take(300)}...")
                 if (chunk.trim().startsWith("{")) {
                     lastValidResponse = chunk
+                    // 尝试从 chunk 中提取 content 并拼接
+                    try {
+                        val json = org.json.JSONObject(chunk)
+                        val messagesArray = json.optJSONArray("messages")
+                        if (messagesArray != null && messagesArray.length() > 0) {
+                            val msg = messagesArray.getJSONObject(0)
+                            val content = msg.optString("content", "")
+                            val addKwargs = msg.optJSONObject("additional_kwargs")
+
+                            if (content.isNotEmpty()) {
+                                fullContent.append(content)
+                            }
+                            // 保存最后的 additional_kwargs（包含 action）
+                            if (addKwargs != null && (addKwargs.has("action") || addKwargs.has("actions"))) {
+                                lastAdditionalKwargs = addKwargs.toString()
+                                Log.d("LangGraph", "找到 additional_kwargs: $lastAdditionalKwargs")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("LangGraph", "解析 chunk 失败", e)
+                    }
                 }
             }
 
+            // 构建最终响应：使用最后的 additional_kwargs（包含 action）
+            val finalResponse = if (lastAdditionalKwargs != null) {
+                """{"messages": [{"role": "assistant", "content": "", "additional_kwargs": $lastAdditionalKwargs}]}"""
+            } else if (fullContent.isNotEmpty()) {
+                // 如果没有 additional_kwargs，尝试从 content 解析
+                """{"messages": [{"role": "assistant", "content": "${fullContent.toString().replace("\"", "\\\"")}"}]}"""
+            } else {
+                lastValidResponse
+            }
+
+            Log.d("LangGraph", "最终响应：${finalResponse.take(300)}...")
+
+            // 清空上一次的截屏数据（已发送）
+            lastScreenshotBase64 = null
+
             onStatus("解析 AI 响应...")
 
-            // 解析 AI 响应
-            val response = com.example.autoscreenagent.ai.AIResponseParser.parse(lastValidResponse)
+            // 解析 AI 响应 - 使用 finalResponse 而不是 lastValidResponse
+            val response = com.example.autoscreenagent.ai.AIResponseParser.parse(finalResponse)
             if (response == null) {
                 onLog("错误：AI 响应解析失败")
                 onStatus("解析失败")
@@ -738,7 +838,7 @@ $feedbackContent
 
             // 执行行动
             onStatus("执行行动...")
-            val results = commandExecutor.execute(response)
+            val results = commandExecutor.execute(response, screenshotManager)
 
             // 收集所有执行结果反馈给 AI
             val currentActionResults = mutableListOf<String>()
@@ -746,8 +846,15 @@ $feedbackContent
                 onLog(result.message)
                 currentActionResults.add(result.message)
 
+                // 检查是否完成任务
                 if (result.message.contains("🎉") || result.message.contains("任务完成")) {
                     taskCompleted = true
+                }
+
+                // 如果是截屏操作，保存 Base64 用于下一次请求
+                if (result is CommandExecutor.ExecuteResult.ScreenshotResult) {
+                    lastScreenshotBase64 = result.base64
+                    onLog("截屏图像已保存，将发送给 AI")
                 }
             }
 

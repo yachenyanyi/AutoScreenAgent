@@ -37,7 +37,7 @@ class CommandExecutor(private val context: Context) {
     /**
      * 执行 AI 响应
      */
-    suspend fun execute(response: AIResponse): List<ExecuteResult> {
+    suspend fun execute(response: AIResponse, screenshotManager: ScreenshotManager? = null): List<ExecuteResult> {
         val results = mutableListOf<ExecuteResult>()
 
         Log.d(TAG, "开始执行 AI 响应，mode=${response.mode}, actions=${response.actions.size}")
@@ -62,7 +62,7 @@ class CommandExecutor(private val context: Context) {
 
             listener?.onActionStart(executableAction)
 
-            val result = executeAction(executableAction)
+            val result = executeAction(executableAction, screenshotManager)
             listener?.onActionComplete(executableAction, result.success, result.message)
 
             results.add(result)
@@ -80,7 +80,7 @@ class CommandExecutor(private val context: Context) {
     /**
      * 执行单个行动
      */
-    private suspend fun executeAction(action: ExecutableAction): ExecuteResult {
+    private suspend fun executeAction(action: ExecutableAction, screenshotManager: ScreenshotManager? = null): ExecuteResult {
         return when (action) {
             // 无障碍模式
             is ExecutableAction.TapByElement -> {
@@ -148,14 +148,18 @@ class CommandExecutor(private val context: Context) {
 
             // 截屏操作
             is ExecutableAction.CaptureScreenshot -> {
-                val screenshotManager = ScreenshotManager.getInstance()
-                val base64 = screenshotManager.captureToBase64(context)
-                if (base64 != null) {
-                    Log.d(TAG, "截屏成功，Base64 长度：${base64.length}")
-                    ExecuteResult.success("✅ 截屏成功，图像已保存为 Base64（${base64.length} 字符）")
+                if (screenshotManager == null) {
+                    ExecuteResult.failure("❌ 截屏失败：截屏管理器未初始化")
                 } else {
-                    Log.e(TAG, "截屏失败：未授权或错误")
-                    ExecuteResult.failure("❌ 截屏失败：请确保已授权截屏服务")
+                    val base64 = screenshotManager.captureToBase64(context)
+                    if (base64 != null) {
+                        Log.d(TAG, "截屏成功，Base64 长度：${base64.length}")
+                        // 返回特殊结果，包含 Base64 数据
+                        ExecuteResult.ScreenshotResult("✅ 截屏成功，图像已保存为 Base64（${base64.length} 字符）", base64)
+                    } else {
+                        Log.e(TAG, "截屏失败：未授权或错误")
+                        ExecuteResult.failure("❌ 截屏失败：请确保已授权截屏服务")
+                    }
                 }
             }
 
@@ -263,17 +267,22 @@ class CommandExecutor(private val context: Context) {
     /**
      * 执行结果
      */
-    data class ExecuteResult(
+    sealed class ExecuteResult(
         val success: Boolean,
-        val message: String,
+        open val message: String,
         val isScreenContent: Boolean = false  // 标记是否包含屏幕内容
     ) {
-        companion object {
-            fun success(message: String) = ExecuteResult(true, message)
-            fun failure(message: String) = ExecuteResult(false, message)
-            fun screenContent(message: String) = ExecuteResult(true, message, isScreenContent = true)
-        }
+        data class Success(override val message: String) : ExecuteResult(true, message)
+        data class Failure(override val message: String) : ExecuteResult(false, message)
+        data class ScreenContent(override val message: String) : ExecuteResult(true, message, isScreenContent = true)
 
-        override fun toString(): String = message
+        // 截屏结果，包含 Base64 数据
+        data class ScreenshotResult(override val message: String, val base64: String) : ExecuteResult(true, message)
+
+        companion object {
+            fun success(message: String) = Success(message)
+            fun failure(message: String) = Failure(message)
+            fun screenContent(message: String) = ScreenContent(message)
+        }
     }
 }

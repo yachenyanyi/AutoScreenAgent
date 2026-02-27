@@ -55,12 +55,32 @@ data class Input(
 )
 
 /**
- * 消息
+ * 消息（支持多模态内容）
  */
 @Serializable
 data class Message(
     val role: String,
-    val content: String
+    @kotlinx.serialization.Contextual val content: Any
+)
+
+/**
+ * 多模态内容项
+ */
+@Serializable
+data class ContentItem(
+    val type: String,
+    @SerialName("text")
+    val text: String? = null,
+    @SerialName("image_url")
+    val imageUrl: ImageUrl? = null
+)
+
+/**
+ * 图片 URL
+ */
+@Serializable
+data class ImageUrl(
+    val url: String
 )
 
 /**

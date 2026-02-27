@@ -183,6 +183,58 @@ fun SettingsScreen(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 悬浮窗
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "悬浮窗",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "在其他应用上层显示输入框",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                    val floatingWindowManager = AccessibilityManager.getFloatingWindowManager()
+                    var isFloatingWindowShowing by remember { mutableStateOf(floatingWindowManager?.isShowing() ?: false) }
+
+                    // 定期检查悬浮窗状态
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            isFloatingWindowShowing = AccessibilityManager.getFloatingWindowManager()?.isShowing() ?: false
+                            kotlinx.coroutines.delay(1000)
+                        }
+                    }
+
+                    if (!isFloatingWindowShowing) {
+                        Button(onClick = {
+                            AccessibilityManager.getFloatingWindowManager()?.show()
+                            isFloatingWindowShowing = true
+                            Toast.makeText(context, "悬浮窗已开启", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("开启")
+                        }
+                    } else {
+                        Button(onClick = {
+                            AccessibilityManager.getFloatingWindowManager()?.hide()
+                            isFloatingWindowShowing = false
+                            Toast.makeText(context, "悬浮窗已关闭", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("关闭")
+                        }
+                    }
+                }
             }
         }
 

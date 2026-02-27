@@ -25,15 +25,24 @@ class MyAccessibilityService : AccessibilityService() {
         fun getInstance(): MyAccessibilityService? = instance
     }
 
+    // 悬浮窗管理器
+    private var floatingWindowManager: FloatingWindowManager? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         Log.d(TAG, "AccessibilityService connected")
+
+        // 初始化悬浮窗管理器
+        floatingWindowManager = FloatingWindowManager(this, this)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        // 清理悬浮窗
+        floatingWindowManager?.hide()
+        floatingWindowManager = null
         Log.d(TAG, "AccessibilityService destroyed")
     }
 
@@ -44,6 +53,11 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         Log.d(TAG, "AccessibilityService interrupted")
     }
+
+    /**
+     * 获取悬浮窗管理器
+     */
+    fun getFloatingWindowManager(): FloatingWindowManager? = floatingWindowManager
 
     /**
      * 获取当前根节点

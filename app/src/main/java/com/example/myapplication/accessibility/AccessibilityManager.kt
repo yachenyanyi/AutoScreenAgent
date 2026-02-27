@@ -65,6 +65,13 @@ object AccessibilityManager {
     }
 
     /**
+     * 获取悬浮窗管理器
+     */
+    fun getFloatingWindowManager(): com.example.autoscreenagent.accessibility.FloatingWindowManager? {
+        return getService()?.getFloatingWindowManager()
+    }
+
+    /**
      * 创建执行器
      */
     fun createExecutor(): ActionExecutor? {

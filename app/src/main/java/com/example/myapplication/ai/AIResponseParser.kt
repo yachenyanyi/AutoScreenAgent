@@ -170,8 +170,10 @@ object AIResponseParser {
      * 从消息对象中提取 actions
      */
     private fun extractActionsFromMessage(msg: JSONObject, actions: MutableList<ActionCommand>) {
-        // 尝试从 additional_kwargs.actions 数组提取
+        // 尝试从 additional_kwargs 提取（LangGraph 格式）
         val additionalKwargs = msg.optJSONObject("additional_kwargs")
+
+        // 1. 尝试从 additional_kwargs.actions 数组提取
         val actionsArray = additionalKwargs?.optJSONArray("actions")
         if (actionsArray != null) {
             for (i in 0 until actionsArray.length()) {
@@ -180,7 +182,13 @@ object AIResponseParser {
             return
         }
 
-        // 尝试从 content 字段提取（JSON 字符串）
+        // 2. 尝试从 additional_kwargs 直接提取 action 对象（LangGraph 格式）
+        if (additionalKwargs != null && additionalKwargs.optString("action", "").isNotEmpty()) {
+            actions.add(parseAction(additionalKwargs))
+            return
+        }
+
+        // 3. 尝试从 content 字段提取（JSON 字符串）
         val contentStr = msg.optString("content", null)
         if (contentStr != null) {
             try {
@@ -195,7 +203,7 @@ object AIResponseParser {
             }
         }
 
-        // 尝试直接从消息对象提取
+        // 4. 尝试直接从消息对象提取
         if (msg.optString("action", "").isNotEmpty()) {
             actions.add(parseAction(msg))
         }
