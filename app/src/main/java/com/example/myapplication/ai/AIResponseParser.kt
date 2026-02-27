@@ -1,6 +1,7 @@
 package com.example.autoscreenagent.ai
 
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -130,6 +131,11 @@ object AIResponseParser {
      */
     fun parse(jsonString: String): AIResponse? {
         return try {
+            // 检查是否是数组格式 [...](直接输出多个 action)
+            if (jsonString.trim().startsWith("[")) {
+                return parseActionsArray(jsonString)
+            }
+
             val json = JSONObject(jsonString)
 
             // 1. 查找 messages 数组（可能在根级别或 model 对象中）
@@ -145,6 +151,16 @@ object AIResponseParser {
             if (messagesArray != null) {
                 // 从最后一个消息提取（包含最新 AI 响应）
                 val lastMessage = messagesArray.getJSONObject(messagesArray.length() - 1)
+
+                // 检查 content 是否是数组格式
+                val contentStr = lastMessage.optString("content", "")
+                if (contentStr.trim().startsWith("[")) {
+                    val contentActions = parseActionsArray(contentStr)
+                    if (contentActions != null) {
+                        return contentActions
+                    }
+                }
+
                 extractActionsFromMessage(lastMessage, actions)
                 thought = lastMessage.optJSONObject("additional_kwargs")?.optString("thought", "") ?: ""
             }
@@ -162,6 +178,45 @@ object AIResponseParser {
             AIResponse(thought = thought, mode = ActionMode.UNKNOWN, actions = actions)
         } catch (e: Exception) {
             Log.e(TAG, "解析失败：${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 解析数组格式的 action [...]
+     * 例如：[{"action": "tap_by_text", ...}, {"action": "capture_screenshot", ...}]
+     */
+    private fun parseActionsArray(jsonString: String): AIResponse? {
+        return try {
+            // 清理 JSON 字符串（移除换行、空格等）
+            val cleanedString = jsonString
+                .trim()
+                .replace("\\s+".toRegex(), " ")  // 替换多个空白字符为空格
+                .replace("\"[\\s\\n]*(".toRegex(), "\"")  // 修复格式
+                .replace("[\\s\\n]*)\"".toRegex(), "\"")
+
+            Log.d(TAG, "解析数组，原始长度: ${jsonString.length}, 清理后: $cleanedString")
+
+            val jsonArray = JSONArray(cleanedString)
+            val actions = mutableListOf<ActionCommand>()
+
+            for (i in 0 until jsonArray.length()) {
+                val actionObj = jsonArray.getJSONObject(i)
+                val action = actionObj.optString("action", "")
+                if (action.isNotEmpty()) {
+                    actions.add(parseAction(actionObj))
+                }
+            }
+
+            if (actions.isEmpty()) {
+                Log.w(TAG, "数组中未找到有效 actions")
+                return null
+            }
+
+            Log.d(TAG, "解析到 ${actions.size} 个 actions (数组格式)")
+            AIResponse(thought = "并行执行多个操作", mode = ActionMode.UNKNOWN, actions = actions)
+        } catch (e: Exception) {
+            Log.e(TAG, "解析数组失败：${e.message}", e)
             null
         }
     }
@@ -188,9 +243,19 @@ object AIResponseParser {
             return
         }
 
-        // 3. 尝试从 content 字段提取（JSON 字符串）
+        // 3. 尝试从 content 字段提取（JSON 字符串 或 数组）
         val contentStr = msg.optString("content", null)
         if (contentStr != null) {
+            // 检查是否是数组格式
+            val trimmedContent = contentStr.trim()
+            if (trimmedContent.startsWith("[")) {
+                val arrayResponse = parseActionsArray(contentStr)
+                if (arrayResponse != null) {
+                    actions.addAll(arrayResponse.actions)
+                    return
+                }
+            }
+
             try {
                 val contentJson = JSONObject(contentStr)
                 val action = contentJson.optString("action", "")

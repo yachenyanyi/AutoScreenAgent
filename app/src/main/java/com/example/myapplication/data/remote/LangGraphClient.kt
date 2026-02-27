@@ -299,6 +299,7 @@ class LangGraphClient(
      *
      * updates 格式：{"model": {"messages": [...]}}
      * values 格式：{"values": {"messages": [...]}}
+     * 中间件格式：{"MobileActionMiddleware.after_agent": {"messages": [...]}}
      *
      * 注意：action 在 content 字段中（JSON 字符串格式）或 additional_kwargs 中
      */
@@ -324,6 +325,18 @@ class LangGraphClient(
         // 尝试解析 JSON 对象格式
         try {
             val json = org.json.JSONObject(jsonText)
+
+            // ========== 处理 MobileActionMiddleware.after_agent 格式 ==========
+            // 这是中间件处理后的最终格式，包含完整的 additional_kwargs.actions
+            val middlewareObj = json.optJSONObject("MobileActionMiddleware.after_agent")
+            if (middlewareObj != null) {
+                val middlewareMessages = middlewareObj.optJSONArray("messages")
+                if (middlewareMessages != null && middlewareMessages.length() > 0) {
+                    val lastMessage = middlewareMessages.getJSONObject(middlewareMessages.length() - 1)
+                    Log.d(TAG, "找到 MobileActionMiddleware.after_agent 消息")
+                    return extractActionFromMessage(lastMessage)
+                }
+            }
 
             // ========== 处理 updates 格式：{"model": {"messages": [...]}} ==========
             val modelObj = json.optJSONObject("model")
@@ -360,7 +373,7 @@ class LangGraphClient(
      * 从消息对象中提取 action
      *
      * action 可能在：
-     * 1. content 字段中（JSON 字符串）
+     * 1. content 字段中（JSON 字符串，可能是数组格式 [...] 或对象格式 {...}）
      * 2. additional_kwargs.actions 数组中
      * 3. additional_kwargs.action 对象中
      */
@@ -401,7 +414,21 @@ class LangGraphClient(
             return """{"messages": [{"role": "assistant", "content": "", "additional_kwargs": $additionalKwargs}]}"""
         }
 
-        // 3. 从 content 字段提取（JSON 字符串）
+        // 3. 从 content 字段提取（数组格式 [...]）
+        if (content.isNotEmpty() && content.trim().startsWith("[")) {
+            try {
+                val contentArray = org.json.JSONArray(content)
+                // 将数组转换为 additional_kwargs.actions 格式
+                val actionsJson = org.json.JSONObject()
+                actionsJson.put("actions", contentArray)
+                Log.d(TAG, "从 content 解析到 actions 数组，长度：${contentArray.length()}")
+                return """{"messages": [{"role": "assistant", "content": "", "additional_kwargs": $actionsJson}]}"""
+            } catch (e: Exception) {
+                Log.d(TAG, "content 数组解析失败：${e.message}")
+            }
+        }
+
+        // 4. 从 content 字段提取（对象格式 {...}）
         if (content.isNotEmpty() && content.trim().startsWith("{")) {
             try {
                 val contentJson = org.json.JSONObject(content)
@@ -409,12 +436,18 @@ class LangGraphClient(
                     Log.d(TAG, "从 content 找到 action: ${contentJson.optString("action")}")
                     return """{"messages": [{"role": "assistant", "content": "", "additional_kwargs": $contentJson}]}"""
                 }
+                // 也可能是数组格式嵌套在对象中
+                val nestedActions = contentJson.optJSONArray("actions")
+                if (nestedActions != null && nestedActions.length() > 0) {
+                    Log.d(TAG, "从 content 找到嵌套 actions 数组")
+                    return """{"messages": [{"role": "assistant", "content": "", "additional_kwargs": $contentJson}]}"""
+                }
             } catch (e: Exception) {
                 Log.d(TAG, "content 不是有效的 JSON")
             }
         }
 
-        // 4. 从 content 字段提取（```json 代码块）
+        // 5. 从 content 字段提取（```json 代码块）
         if (content.isNotEmpty()) {
             val jsonMatch = Regex("```json\\s*\\{([^}]+)\\}").find(content)
             if (jsonMatch != null) {

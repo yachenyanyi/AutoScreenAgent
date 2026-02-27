@@ -111,20 +111,24 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
-        val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
-        if (nodes.isEmpty()) {
-            return ActionResult.NotFound("id", viewId)
+        return try {
+            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (nodes.isEmpty()) {
+                return ActionResult.NotFound("id", viewId)
+            }
+
+            val node = nodes.firstOrNull { it.isClickable && it.isEnabled }
+                ?: nodes.firstOrNull()
+                ?: return ActionResult.Failure("节点不可点击")
+
+            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+            Log.d(TAG, "点击 ID: $viewId, 成功：$success")
+            if (success) ActionResult.Success
+            else ActionResult.Failure("点击失败")
+        } finally {
+            root.recycle()
         }
-
-        val node = nodes.firstOrNull { it.isClickable && it.isEnabled }
-            ?: nodes.firstOrNull()
-            ?: return ActionResult.Failure("节点不可点击")
-
-        val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
-        Log.d(TAG, "点击 ID: $viewId, 成功：$success")
-        return if (success) ActionResult.Success
-               else ActionResult.Failure("点击失败")
     }
 
     /**
@@ -134,14 +138,18 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
-        val node = findNodeByText(root, text, 0, maxDepth)
-            ?: return ActionResult.NotFound("text", text)
+        return try {
+            val node = findNodeByText(root, text, 0, maxDepth)
+                ?: return ActionResult.NotFound("text", text)
 
-        val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
 
-        Log.d(TAG, "点击文本：'$text', 成功：$success")
-        return if (success) ActionResult.Success
-               else ActionResult.Failure("点击失败")
+            Log.d(TAG, "点击文本：'$text', 成功：$success")
+            if (success) ActionResult.Success
+            else ActionResult.Failure("点击失败")
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -178,34 +186,38 @@ class ActionExecutor {
 
         Log.d(TAG, "typeText: 开始输入 '$text'")
 
-        // 先查找当前聚焦的输入框
-        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        if (focused != null) {
-            Log.d(TAG, "typeText: 找到已聚焦的输入框")
-            val result = setText(focused, text)
-            if (result is ActionResult.Success) return result
+        try {
+            // 先查找当前聚焦的输入框
+            val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focused != null) {
+                Log.d(TAG, "typeText: 找到已聚焦的输入框")
+                val result = setText(focused, text)
+                focused.recycle()
+                if (result is ActionResult.Success) return result
+            }
+
+            // 查找可编辑的 EditText（优先查找 class 名）
+            val editText = findEditText(root)
+            if (editText != null) {
+                Log.d(TAG, "typeText: 找到 EditText，尝试聚焦")
+                // 先尝试聚焦
+                val focusSuccess = editText.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                Log.d(TAG, "typeText: 聚焦结果：$focusSuccess")
+
+                // 尝试点击
+                val clickSuccess = editText.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                Log.d(TAG, "typeText: 点击结果：$clickSuccess")
+
+                val result = setText(editText, text)
+                editText.recycle()
+                if (result is ActionResult.Success) return result
+            }
+
+            Log.d(TAG, "typeText: 未找到输入框或输入失败")
+            return ActionResult.Failure("未找到输入框或不支持此输入方式")
+        } finally {
+            root.recycle()
         }
-
-        // 查找可编辑的 EditText（优先查找 class 名）
-        val editText = findEditText(root)
-        if (editText != null) {
-            Log.d(TAG, "typeText: 找到 EditText，尝试聚焦")
-            // 先尝试聚焦
-            val focusSuccess = editText.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-            Log.d(TAG, "typeText: 聚焦结果：$focusSuccess")
-            Thread.sleep(100) // 等待聚焦
-
-            // 尝试点击
-            val clickSuccess = editText.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            Log.d(TAG, "typeText: 点击结果：$clickSuccess")
-            Thread.sleep(100)
-
-            val result = setText(editText, text)
-            if (result is ActionResult.Success) return result
-        }
-
-        Log.d(TAG, "typeText: 未找到输入框或输入失败")
-        return ActionResult.Failure("未找到输入框或不支持此输入方式")
     }
 
     private fun setText(node: AccessibilityNodeInfo, text: String): ActionResult {
@@ -307,14 +319,18 @@ class ActionExecutor {
     @RequiresApi(Build.VERSION_CODES.N)
     fun swipeUp(): ActionResult {
         val root = service.rootInActiveWindow ?: return ActionResult.Failure("无法获取根节点")
-        val rect = Rect()
-        root.getBoundsInScreen(rect)
+        return try {
+            val rect = Rect()
+            root.getBoundsInScreen(rect)
 
-        val centerX = rect.centerX().toFloat()
-        val startY = rect.bottom.toFloat() * 0.7f
-        val endY = rect.top.toFloat() * 1.3f
+            val centerX = rect.centerX().toFloat()
+            val startY = rect.bottom.toFloat() * 0.7f
+            val endY = rect.top.toFloat() * 1.3f
 
-        return swipe(centerX, startY, centerX, endY, 300)
+            swipe(centerX, startY, centerX, endY, 300)
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -323,14 +339,18 @@ class ActionExecutor {
     @RequiresApi(Build.VERSION_CODES.N)
     fun swipeDown(): ActionResult {
         val root = service.rootInActiveWindow ?: return ActionResult.Failure("无法获取根节点")
-        val rect = Rect()
-        root.getBoundsInScreen(rect)
+        return try {
+            val rect = Rect()
+            root.getBoundsInScreen(rect)
 
-        val centerX = rect.centerX().toFloat()
-        val startY = rect.top.toFloat() * 0.3f
-        val endY = rect.bottom.toFloat() * 0.7f
+            val centerX = rect.centerX().toFloat()
+            val startY = rect.top.toFloat() * 0.3f
+            val endY = rect.bottom.toFloat() * 0.7f
 
-        return swipe(centerX, startY, centerX, endY, 300)
+            swipe(centerX, startY, centerX, endY, 300)
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -339,14 +359,18 @@ class ActionExecutor {
     @RequiresApi(Build.VERSION_CODES.N)
     fun swipeLeft(): ActionResult {
         val root = service.rootInActiveWindow ?: return ActionResult.Failure("无法获取根节点")
-        val rect = Rect()
-        root.getBoundsInScreen(rect)
+        return try {
+            val rect = Rect()
+            root.getBoundsInScreen(rect)
 
-        val startX = rect.right.toFloat() * 0.7f
-        val centerY = rect.centerY().toFloat()
-        val endX = rect.left.toFloat() * 1.3f
+            val startX = rect.right.toFloat() * 0.7f
+            val centerY = rect.centerY().toFloat()
+            val endX = rect.left.toFloat() * 1.3f
 
-        return swipe(startX, centerY, endX, centerY, 300)
+            swipe(startX, centerY, endX, centerY, 300)
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -355,14 +379,18 @@ class ActionExecutor {
     @RequiresApi(Build.VERSION_CODES.N)
     fun swipeRight(): ActionResult {
         val root = service.rootInActiveWindow ?: return ActionResult.Failure("无法获取根节点")
-        val rect = Rect()
-        root.getBoundsInScreen(rect)
+        return try {
+            val rect = Rect()
+            root.getBoundsInScreen(rect)
 
-        val startX = rect.left.toFloat() * 0.3f
-        val centerY = rect.centerY().toFloat()
-        val endX = rect.right.toFloat() * 0.7f
+            val startX = rect.left.toFloat() * 0.3f
+            val centerY = rect.centerY().toFloat()
+            val endX = rect.right.toFloat() * 0.7f
 
-        return swipe(startX, centerY, endX, centerY, 300)
+            swipe(startX, centerY, endX, centerY, 300)
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -387,12 +415,17 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
-        val node = findNodeByText(root, text, 0, DEFAULT_MAX_DEPTH)
-            ?: return ActionResult.NotFound("text", text)
+        return try {
+            val node = findNodeByText(root, text, 0, DEFAULT_MAX_DEPTH)
+                ?: return ActionResult.NotFound("text", text)
 
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        return longPress(rect.centerX(), rect.centerY(), duration)
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            node.recycle()
+            longPress(rect.centerX(), rect.centerY(), duration)
+        } finally {
+            root.recycle()
+        }
     }
 
     /**
@@ -403,15 +436,20 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
-        val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
-        if (nodes.isEmpty()) {
-            return ActionResult.NotFound("id", viewId)
-        }
+        return try {
+            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (nodes.isEmpty()) {
+                return ActionResult.NotFound("id", viewId)
+            }
 
-        val node = nodes.firstOrNull() ?: return ActionResult.Failure("节点不存在")
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        return longPress(rect.centerX(), rect.centerY(), duration)
+            val node = nodes.firstOrNull() ?: return ActionResult.Failure("节点不存在")
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            node.recycle()
+            longPress(rect.centerX(), rect.centerY(), duration)
+        } finally {
+            root.recycle()
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
@@ -521,12 +559,17 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
-        val node = findNodeByContentDescRecursive(root, contentDesc, 0, DEFAULT_MAX_DEPTH)
-            ?: return ActionResult.NotFound("contentDescription", contentDesc)
+        return try {
+            val node = findNodeByContentDescRecursive(root, contentDesc, 0, DEFAULT_MAX_DEPTH)
+                ?: return ActionResult.NotFound("contentDescription", contentDesc)
 
-        val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        return if (success) ActionResult.Success
-               else ActionResult.Failure("点击失败")
+            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            node.recycle()
+            if (success) ActionResult.Success
+            else ActionResult.Failure("点击失败")
+        } finally {
+            root.recycle()
+        }
     }
 
     private fun findNodeByContentDescRecursive(

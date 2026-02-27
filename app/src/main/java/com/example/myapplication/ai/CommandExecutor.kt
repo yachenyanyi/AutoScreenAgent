@@ -26,14 +26,6 @@ class CommandExecutor(private val context: Context) {
     private var actionExecutor: ActionExecutor? = null
     private var coordinateExecutor: CoordinateExecutor? = null
 
-    private val listener: CommandExecuteListener? = null
-
-    interface CommandExecuteListener {
-        fun onActionStart(action: ExecutableAction)
-        fun onActionComplete(action: ExecutableAction, success: Boolean, result: String?)
-        fun onAllComplete(success: Boolean, results: List<String>)
-    }
-
     /**
      * 执行 AI 响应
      */
@@ -60,10 +52,7 @@ class CommandExecutor(private val context: Context) {
                 continue
             }
 
-            listener?.onActionStart(executableAction)
-
             val result = executeAction(executableAction, screenshotManager)
-            listener?.onActionComplete(executableAction, result.success, result.message)
 
             results.add(result)
 
@@ -73,7 +62,6 @@ class CommandExecutor(private val context: Context) {
             }
         }
 
-        listener?.onAllComplete(results.all { it.success }, results.map { it.message })
         return results
     }
 
