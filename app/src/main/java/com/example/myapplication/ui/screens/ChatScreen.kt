@@ -7,8 +7,10 @@ import android.content.IntentFilter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,16 +35,25 @@ import com.example.autoscreenagent.*
 import com.example.autoscreenagent.accessibility.AccessibilityManager
 import com.example.autoscreenagent.accessibility.ScreenshotManager
 import com.example.autoscreenagent.ai.CommandExecutor
+import com.example.autoscreenagent.agent.Agent
+import com.example.autoscreenagent.agent.AgentState
 import com.example.autoscreenagent.data.remote.LangGraphClient
 import com.example.autoscreenagent.ui.viewmodel.AppViewModel
 import com.example.autoscreenagent.ui.viewmodel.MessageItem
 import kotlinx.coroutines.launch
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 
 /**
  * 简单消息气泡组件
+ * 支持长按复制
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatMessageBubble(message: ChatMessage) {
+    val context = LocalContext.current
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
@@ -65,6 +76,12 @@ fun ChatMessageBubble(message: ChatMessage) {
                         MaterialTheme.colorScheme.secondaryContainer
                 )
                 .padding(12.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        copyToClipboard(context, message.content)
+                    }
+                )
         ) {
             Text(
                 text = message.content,
@@ -78,18 +95,44 @@ fun ChatMessageBubble(message: ChatMessage) {
     }
 }
 
+private fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("AI 回复", text)
+    clipboard.setPrimaryClip(clip)
+    Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+}
+
 /**
  * 聚合消息气泡组件
+ * 支持长按复制完整日志
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AggregatedMessageBubble(
     message: AggregatedMessage,
     onToggleExpand: () -> Unit
 ) {
+    val context = LocalContext.current
+    // 合并所有详情为可复制文本
+    val fullContent = buildString {
+        append("状态: ${message.status.name}\n")
+        append("摘要: ${message.summary}\n")
+        if (message.details.isNotEmpty()) {
+            append("\n--- 详细日志 ---\n")
+            message.details.forEach { append("$it\n") }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(end = 32.dp) // 留出左侧空间，模拟 AI 消息靠左
+            .combinedClickable(
+                onClick = { onToggleExpand() },
+                onLongClick = {
+                    copyToClipboard(context, fullContent)
+                }
+            )
     ) {
         Card(
             modifier = Modifier
@@ -112,8 +155,7 @@ fun AggregatedMessageBubble(
             Column(modifier = Modifier.padding(12.dp)) {
                 // 状态指示器 + 摘要
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { onToggleExpand() }
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 状态图标
                     when (message.status) {
@@ -304,35 +346,67 @@ fun ChatScreen(
         }
     }
 
-    // 启动 Agent 的函数
+    // 启动 Agent 的函数（使用智谱 API）
     fun launchAgent(goal: String) {
         appViewModel.setAgentRunning(true)
-        appViewModel.setAgentStatus("分析中...")
-        appViewModel.startAggregatedMessage()  // 开始聚合消息
+        appViewModel.setAgentStatus("初始化 Agent...")
+        appViewModel.startAggregatedMessage()
 
+        // 获取新的 Agent 实例（每次都创建新的）
+        val agent = appViewModel.createAgent(
+            context = context,
+            screenshotManager = screenshotManager,
+            commandExecutor = commandExecutor
+        )
+
+        // 监听 Agent 状态
         scope.launch {
-            AgentLoop.run(
+            agent.state.collect { state ->
+                when (state) {
+                    is AgentState.Running -> {
+                        appViewModel.setAgentStatus(state.status)
+                    }
+                    is AgentState.Completed -> {
+                        appViewModel.completeAggregatedMessage(
+                            status = MessageStatus.SUCCESS,
+                            finalMessage = state.message
+                        )
+                        appViewModel.setAgentRunning(false)
+                        appViewModel.setAgentStatus("就绪")
+                    }
+                    is AgentState.Failed -> {
+                        appViewModel.completeAggregatedMessage(
+                            status = MessageStatus.ERROR,
+                            finalMessage = state.error
+                        )
+                        appViewModel.setAgentRunning(false)
+                        appViewModel.setAgentStatus("失败")
+                    }
+                    is AgentState.Cancelled -> {
+                        appViewModel.completeAggregatedMessage(
+                            status = MessageStatus.ERROR,
+                            finalMessage = "任务已取消"
+                        )
+                        appViewModel.setAgentRunning(false)
+                        appViewModel.setAgentStatus("已取消")
+                    }
+                    is AgentState.Idle -> {
+                        // 空闲状态，不做处理
+                    }
+                }
+            }
+        }
+
+        // 运行 Agent（Tool Calling 模式）
+        scope.launch {
+            agent.runWithTools(
                 goal = goal,
-                langGraphClient = langGraphClient,
-                screenshotManager = screenshotManager,
-                commandExecutor = commandExecutor,
                 onLog = { msg ->
                     msg.lines().forEach { line ->
                         if (line.isNotBlank()) {
-                            appViewModel.appendLog(line)  // 追加到聚合消息
+                            appViewModel.appendLog(line)
                         }
                     }
-                },
-                onStatus = { status ->
-                    appViewModel.setAgentStatus(status)
-                },
-                onComplete = {
-                    appViewModel.completeAggregatedMessage(
-                        status = MessageStatus.SUCCESS,
-                        finalMessage = "任务完成"
-                    )
-                    appViewModel.setAgentRunning(false)
-                    appViewModel.setAgentStatus("就绪")
                 }
             )
         }

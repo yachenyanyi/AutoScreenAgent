@@ -68,7 +68,7 @@ class CommandExecutor(private val context: Context) {
     /**
      * 执行单个行动
      */
-    private suspend fun executeAction(action: ExecutableAction, screenshotManager: ScreenshotManager? = null): ExecuteResult {
+    suspend fun executeAction(action: ExecutableAction, screenshotManager: ScreenshotManager? = null): ExecuteResult {
         return when (action) {
             // 无障碍模式
             is ExecutableAction.TapByElement -> {

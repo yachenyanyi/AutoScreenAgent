@@ -170,6 +170,11 @@ object AIResponseParser {
                 extractActionsFromMessage(json, actions)
             }
 
+            // 4. 如果仍然没有 actions，尝试直接解析根级别的 action（简单 JSON 格式）
+            if (actions.isEmpty() && json.optString("action", "").isNotEmpty()) {
+                actions.add(parseAction(json))
+            }
+
             Log.d(TAG, "解析到 ${actions.size} 个 actions")
             actions.forEachIndexed { i, action ->
                 Log.d(TAG, "  [$i] ${action.action}, metadata=${action._metadata}")

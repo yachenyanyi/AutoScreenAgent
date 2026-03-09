@@ -8,8 +8,18 @@ import androidx.lifecycle.viewModelScope
 import com.example.autoscreenagent.AggregatedMessage
 import com.example.autoscreenagent.ChatMessage
 import com.example.autoscreenagent.MessageStatus
-import com.example.autoscreenagent.data.remote.AgentConfig
+import com.example.autoscreenagent.accessibility.ScreenshotManager
+import com.example.autoscreenagent.ai.CommandExecutor
+import com.example.autoscreenagent.agent.Agent
+import com.example.autoscreenagent.agent.AgentConfig
+import com.example.autoscreenagent.data.remote.zhipu.ZhipuClient
+import com.example.autoscreenagent.data.remote.zhipu.ZhipuConversation
+import com.example.autoscreenagent.data.remote.AgentConfig as RemoteAgentConfig
 import com.example.autoscreenagent.data.remote.LangGraphClient
+import com.example.autoscreenagent.data.remote.model.ModelConfig
+import com.example.autoscreenagent.data.remote.model.ModelConversation
+import com.example.autoscreenagent.data.remote.model.ModelManager
+import com.example.autoscreenagent.data.remote.model.ModelProviderType
 import com.example.autoscreenagent.ui.screens.loadConfig
 import com.example.autoscreenagent.ui.screens.saveConfig
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +41,8 @@ sealed class MessageItem {
  */
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _config = MutableStateFlow(AgentConfig())
-    val config: StateFlow<AgentConfig> = _config.asStateFlow()
+    private val _config = MutableStateFlow(RemoteAgentConfig())
+    val config: StateFlow<RemoteAgentConfig> = _config.asStateFlow()
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -52,6 +62,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var currentAggregatedMessage: AggregatedMessage? = null
 
     private lateinit var langGraphClient: LangGraphClient
+
+    // 新 Agent 实例（使用智谱 API）
+    private var agent: Agent? = null
+
     private val prefs: SharedPreferences
 
     init {
@@ -71,16 +85,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 保存配置
      */
-    fun saveConfig(newConfig: AgentConfig) {
+    fun saveConfig(newConfig: RemoteAgentConfig) {
         _config.value = newConfig
         saveConfig(getApplication(), newConfig)
-        initLangGraphClient(newConfig)
+        // 清除旧 Agent，使用新配置重新创建
+        clearAgent()
     }
 
     /**
      * 初始化 LangGraph 客户端
      */
-    private fun initLangGraphClient(config: AgentConfig) {
+    private fun initLangGraphClient(config: RemoteAgentConfig) {
         langGraphClient = LangGraphClient(config)
         viewModelScope.launch {
             _isConnected.value = langGraphClient.healthCheck()
@@ -99,6 +114,115 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun testConnection(): Boolean {
         return langGraphClient.healthCheck()
+    }
+
+    // ==================== 新 Agent 管理（智谱 API） ====================
+
+    /**
+     * 创建新的 Agent（每次对话都是全新的实例）
+     */
+    fun createAgent(
+        context: Context,
+        screenshotManager: ScreenshotManager,
+        commandExecutor: CommandExecutor
+    ): Agent {
+        val config = _config.value
+        val providerType = config.getProviderType()
+
+        // 根据厂商类型设置不同的 baseUrl
+        val baseUrl = when (providerType) {
+            ModelProviderType.ZHIPU -> "https://open.bigmodel.cn/api/paas/v4"
+            ModelProviderType.ALIBABA -> "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            ModelProviderType.OPENAI -> "https://api.openai.com/v1"
+            ModelProviderType.CUSTOM -> ""
+        }
+
+        // 使用 ModelManager 根据配置创建 Provider
+        val modelConfig = ModelConfig(
+            provider = providerType,
+            apiKey = config.apiKey,
+            model = config.model,
+            enableThinking = config.enableThinking
+        )
+
+        // 初始化 ModelManager
+        val manager = ModelManager.getInstance()
+        manager.setConfig(modelConfig)
+
+        // 每次都创建新的 Agent 实例，确保状态干净
+        return Agent(
+            conversation = ZhipuConversation(
+                client = ZhipuClient(
+                    com.example.autoscreenagent.data.remote.zhipu.ZhipuConfig(
+                        apiKey = config.apiKey,
+                        baseUrl = baseUrl,
+                        model = config.model,
+                        enableThinking = config.enableThinking
+                    )
+                ),
+                systemPrompt = com.example.autoscreenagent.agent.AgentConfig.DEFAULT_SYSTEM_PROMPT,
+                removeImagesAfterRounds = config.removeImagesAfterRounds,
+                maxHistoryMessages = config.maxHistoryMessages
+            ),
+            config = com.example.autoscreenagent.agent.AgentConfig(
+                maxIterations = config.maxIterations,
+                iterationDelay = config.iterationDelayMs,
+                autoCaptureScreenshot = config.autoCaptureScreenshot,
+                enableThinking = config.enableThinking,
+                removeImagesAfterRounds = config.removeImagesAfterRounds
+            ),
+            screenshotManager = screenshotManager,
+            commandExecutor = commandExecutor,
+            context = context
+        )
+    }
+
+    /**
+     * 获取或创建 Agent（兼容旧代码，已废弃，请使用 createAgent）
+     */
+    @Deprecated("请使用 createAgent 方法")
+    fun getOrCreateAgent(
+        context: Context,
+        screenshotManager: ScreenshotManager,
+        commandExecutor: CommandExecutor
+    ): Agent {
+        val config = _config.value
+        if (agent == null) {
+            // 创建配置了模型的 ZhipuClient
+            val zhipuClient = ZhipuClient().apply {
+                if (config.model.isNotBlank()) {
+                    setModel(config.model)
+                }
+            }
+
+            agent = Agent(
+                conversation = ZhipuConversation(
+                    client = zhipuClient,
+                    systemPrompt = com.example.autoscreenagent.agent.AgentConfig.DEFAULT_SYSTEM_PROMPT,
+                    removeImagesAfterRounds = config.removeImagesAfterRounds,
+                    maxHistoryMessages = config.maxHistoryMessages
+                ),
+                config = com.example.autoscreenagent.agent.AgentConfig(
+                    maxIterations = config.maxIterations,
+                    iterationDelay = config.iterationDelayMs,
+                    autoCaptureScreenshot = config.autoCaptureScreenshot,
+                    enableThinking = config.enableThinking,
+                    removeImagesAfterRounds = config.removeImagesAfterRounds
+                ),
+                screenshotManager = screenshotManager,
+                commandExecutor = commandExecutor,
+                context = context
+            )
+        }
+        return agent!!
+    }
+
+    /**
+     * 清除 Agent（用于重新开始对话）
+     */
+    fun clearAgent() {
+        agent?.reset()
+        agent = null
     }
 
     /**

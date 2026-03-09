@@ -13,6 +13,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.autoscreenagent.accessibility.AccessibilityManager
 import com.example.autoscreenagent.accessibility.ScreenshotManager
+import com.example.autoscreenagent.data.remote.zhipu.ZhipuClient
+import com.example.autoscreenagent.data.remote.zhipu.ZhipuConfig
+import com.example.autoscreenagent.data.remote.zhipu.ZhipuConversation
+import com.example.autoscreenagent.agent.Agent
+import com.example.autoscreenagent.agent.AgentConfig
 import com.example.autoscreenagent.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.launch
 
@@ -143,6 +148,161 @@ fun DebugMenuScreen(
             enabled = screenshotManager.isAuthorized()
         ) {
             Text("截屏 (Base64)")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 智谱 API 测试
+        Text("智谱 API 测试", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                scope.launch {
+                    appendLog(">>> 测试智谱 API")
+                    try {
+                        val client = ZhipuClient()
+                        val result = StringBuilder()
+                        val reasoning = StringBuilder()
+
+                        client.sendMessage("你好，请用一句话介绍你自己")
+                            .collect { chunk ->
+                                chunk.getReasoningContent()?.let { reasoning.append(it) }
+                                chunk.getContent()?.let {
+                                    result.append(it)
+                                }
+                            }
+
+                        if (reasoning.isNotEmpty()) {
+                            appendLog("💭 思考: ${reasoning.take(100)}...")
+                        }
+                        appendLog("📝 回复: $result")
+                        appendLog("✅ 智谱 API 测试成功！")
+                    } catch (e: Exception) {
+                        appendLog("❌ 错误: ${e.message}")
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("测试智谱 API (文本)")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                scope.launch {
+                    appendLog(">>> 测试智谱 API (图片)")
+                    try {
+                        val client = ZhipuClient()
+                        val base64 = screenshotManager.captureToBase64(context)
+                        if (base64 != null) {
+                            appendLog("截屏成功，发送给智谱...")
+                            val result = StringBuilder()
+
+                            client.sendMessageWithImageBase64("描述这张截图的内容", base64)
+                                .collect { chunk ->
+                                    chunk.getContent()?.let { result.append(it) }
+                                }
+
+                            appendLog("📝 描述: $result")
+                            appendLog("✅ 图片理解测试成功！")
+                        } else {
+                            appendLog("❌ 截屏失败")
+                        }
+                    } catch (e: Exception) {
+                        appendLog("❌ 错误: ${e.message}")
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = screenshotManager.isAuthorized()
+        ) {
+            Text("测试智谱 API (截图)")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 对话历史测试
+        Button(
+            onClick = {
+                scope.launch {
+                    appendLog(">>> 测试对话历史（自动移除图片）")
+                    try {
+                        // 创建会话，2 轮后移除图片
+                        val conversation = ZhipuConversation(
+                            systemPrompt = "你是一个手机操作助手",
+                            removeImagesAfterRounds = 2
+                        )
+
+                        // 第 1 轮：文本
+                        appendLog("第 1 轮: 我叫小明")
+                        conversation.send("我叫小明，请记住我的名字").collect { chunk ->
+                            chunk.getContent()?.let { appendLog(it) }
+                        }
+
+                        // 第 2 轮：测试记忆
+                        appendLog("\n第 2 轮: 我叫什么？")
+                        conversation.send("我叫什么名字？").collect { chunk ->
+                            chunk.getContent()?.let { appendLog(it) }
+                        }
+
+                        appendLog("\n📊 当前历史: ${conversation.getHistoryCount()} 条消息")
+                        appendLog("✅ 对话历史测试成功！AI 应该记住了名字")
+                    } catch (e: Exception) {
+                        appendLog("❌ 错误: ${e.message}")
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("测试对话历史")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 测试 Agent 模块
+        Button(
+            onClick = {
+                appendLog("\n=== 测试 Agent ===")
+                scope.launch {
+                    try {
+                        // 创建 Agent，使用 AgentConfig 默认配置（新系统提示词）
+                        val agent = Agent(
+                            conversation = ZhipuConversation(
+                                removeImagesAfterRounds = 3
+                            ),
+                            config = AgentConfig(
+                                maxIterations = 5,
+                                autoCaptureScreenshot = true
+                            ),
+                            screenshotManager = screenshotManager,
+                            context = context
+                        )
+
+                        // 监听状态
+                        launch {
+                            agent.state.collect { state ->
+                                appendLog("状态: $state")
+                            }
+                        }
+
+                        // 运行
+                        val result = agent.run(
+                            goal = "打开微信",
+                            onLog = { log -> appendLog(log) }
+                        )
+
+                        appendLog("\n✅ Agent 测试完成，最终状态: $result")
+                    } catch (e: Exception) {
+                        appendLog("❌ Agent 测试失败: ${e.message}")
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("测试 Agent 模块")
         }
 
         Spacer(modifier = Modifier.height(16.dp))

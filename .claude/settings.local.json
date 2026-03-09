@@ -13,7 +13,14 @@
       "Bash(./gradlew assembleDebug --no-daemon 2>&1 | tail - 10)",
       "Bash(./gradlew assembleDebug 2>&1 | tail -50)",
       "Bash(./gradlew assembleDebug 2>&1 | grep -A 5 \"FAILED\")",
-      "Bash(./gradlew assembleDebug 2>&1 | tail -15)"
+      "Bash(./gradlew assembleDebug 2>&1 | tail -15)",
+      "Bash(./gradlew assembleDebug --no-daemon 2>&1 | tail -20)",
+      "Bash(./gradlew assembleDebug --no-daemon 2>&1 | tail -15)",
+      "Bash(adb install -r /home/wt/android_development/app/build/outputs/apk/debug/app-debug.apk)",
+      "mcp__langchain-doc__SearchDocsByLangChain",
+      "Bash(./gradlew compileDebugKotlin 2>&1 | tail -25)",
+      "Bash(./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk)",
+      "Bash(./gradlew compileDebugKotlin 2>&1 | tail -30)"
     ]
   }
 }

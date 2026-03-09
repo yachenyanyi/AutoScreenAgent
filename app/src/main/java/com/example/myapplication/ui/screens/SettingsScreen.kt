@@ -7,9 +7,13 @@ import android.content.IntentFilter
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,13 +25,17 @@ import androidx.core.content.ContextCompat
 import com.example.autoscreenagent.accessibility.AccessibilityManager
 import com.example.autoscreenagent.accessibility.ScreenshotManager
 import com.example.autoscreenagent.data.remote.AgentConfig
+import com.example.autoscreenagent.data.remote.ModelOption
+import com.example.autoscreenagent.data.remote.model.ModelProviderType
 import com.example.autoscreenagent.service.ScreenshotForegroundService
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+@OptIn(ExperimentalMaterial3Api::class)
+
 /**
  * 设置屏幕
- * 用于配置 LangGraph Server 地址和 Assistant ID
+ * 用于配置模型 API 和 Agent 参数
  */
 @Composable
 fun SettingsScreen(
@@ -37,7 +45,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
 
-    // 权限状态 - 使用 remember 和 LaunchedEffect 来正确管理状态
+    // 权限状态
     var isAccessibilityEnabled by remember { mutableStateOf(AccessibilityManager.isEnabled(context)) }
     val screenshotManager = remember { ScreenshotManager.getInstance() }
     screenshotManager.setContext(context)
@@ -84,14 +92,44 @@ fun SettingsScreen(
         }
     }
 
-    var baseUrl by remember { mutableStateOf(config.baseUrl) }
-    var assistantId by remember { mutableStateOf(config.assistantId) }
-    var timeoutSeconds by remember { mutableStateOf(config.timeoutSeconds.toString()) }
+    // 配置状态
+    var selectedProvider by remember { mutableStateOf(config.getProviderType()) }
+    var selectedModel by remember { mutableStateOf(config.model) }
+    var customModelId by remember { mutableStateOf(config.customModelId) }
+    var apiKey by remember { mutableStateOf(config.apiKey) }
+    var maxIterations by remember { mutableStateOf(config.maxIterations.toString()) }
+    var iterationDelay by remember { mutableStateOf(config.iterationDelayMs.toString()) }
+    var autoCaptureScreenshot by remember { mutableStateOf(config.autoCaptureScreenshot) }
+    var enableThinking by remember { mutableStateOf(config.enableThinking) }
+    var maxHistoryMessages by remember { mutableStateOf(config.maxHistoryMessages.toString()) }
+    var removeImagesAfterRounds by remember { mutableStateOf(config.removeImagesAfterRounds.toString()) }
+
+    // 厂商选择下拉菜单
+    var providerExpanded by remember { mutableStateOf(false) }
+    val availableProviders = AgentConfig.getAvailableProviders()
+    val selectedProviderInfo = availableProviders.find { it.id == selectedProvider.name }
+
+    // 模型选择下拉菜单
+    var modelExpanded by remember { mutableStateOf(false) }
+    val availableModels = AgentConfig.getAvailableModels(selectedProvider, customModelId)
+    val selectedModelInfo = availableModels.find { it.id == selectedModel }
+
+    // 当厂商变化时，重置模型选择
+    LaunchedEffect(selectedProvider) {
+        val defaultModel = AgentConfig.getDefaultModel(selectedProvider)
+        val hasModel = availableModels.any { it.id == selectedModel }
+        if (!hasModel) {
+            selectedModel = defaultModel
+        }
+    }
+
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
+            .verticalScroll(scrollState)
     ) {
         // 标题
         Text(
@@ -116,170 +154,315 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 无障碍服务
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "无障碍服务",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = if (isAccessibilityEnabled) "已启用" else "未启用",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                    if (!isAccessibilityEnabled) {
-                        Button(onClick = { AccessibilityManager.openAccessibilitySettings(context) }) {
-                            Text("去开启")
-                        }
-                    } else {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "已启用",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                PermissionRow(
+                    title = "无障碍服务",
+                    status = if (isAccessibilityEnabled) "已启用" else "未启用",
+                    isEnabled = isAccessibilityEnabled,
+                    buttonText = if (isAccessibilityEnabled) null else "去开启",
+                    onButtonClick = { AccessibilityManager.openAccessibilitySettings(context) }
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 截屏服务
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "截屏服务",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = if (isScreenshotAuthorized) "已授权" else "未授权",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
+                PermissionRow(
+                    title = "截屏服务",
+                    status = if (isScreenshotAuthorized) "已授权" else "未授权",
+                    isEnabled = isScreenshotAuthorized,
+                    buttonText = if (isScreenshotAuthorized) null else "授权",
+                    onButtonClick = {
+                        val intent = ScreenshotManager.getMediaProjectionIntent(context)
+                        screenshotActivityLauncher.launch(intent)
                     }
-                    if (!isScreenshotAuthorized) {
-                        Button(onClick = {
-                            val intent = ScreenshotManager.getMediaProjectionIntent(context)
-                            screenshotActivityLauncher.launch(intent)
-                        }) {
-                            Text("授权")
-                        }
-                    } else {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "已授权",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 悬浮窗
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                PermissionRow(
+                    title = "悬浮窗",
+                    subtitle = "在其他应用上层显示输入框",
+                    status = null,
+                    isEnabled = false,
+                    buttonText = null,
+                    onButtonClick = {}
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Agent 配置标题
+        Text(
+            text = "Agent 配置",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 厂商选择
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "选择厂商",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = providerExpanded,
+                    onExpandedChange = { providerExpanded = it }
                 ) {
-                    Column {
-                        Text(
-                            text = "悬浮窗",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "在其他应用上层显示输入框",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                    val floatingWindowManager = AccessibilityManager.getFloatingWindowManager()
-                    var isFloatingWindowShowing by remember { mutableStateOf(floatingWindowManager?.isShowing() ?: false) }
+                    OutlinedTextField(
+                        value = selectedProviderInfo?.name ?: selectedProvider.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = providerExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
 
-                    // 定期检查悬浮窗状态
-                    LaunchedEffect(Unit) {
-                        while (true) {
-                            isFloatingWindowShowing = AccessibilityManager.getFloatingWindowManager()?.isShowing() ?: false
-                            kotlinx.coroutines.delay(1000)
-                        }
-                    }
-
-                    if (!isFloatingWindowShowing) {
-                        Button(onClick = {
-                            AccessibilityManager.getFloatingWindowManager()?.show()
-                            isFloatingWindowShowing = true
-                            Toast.makeText(context, "悬浮窗已开启", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Text("开启")
-                        }
-                    } else {
-                        Button(onClick = {
-                            AccessibilityManager.getFloatingWindowManager()?.hide()
-                            isFloatingWindowShowing = false
-                            Toast.makeText(context, "悬浮窗已关闭", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Text("关闭")
+                    ExposedDropdownMenu(
+                        expanded = providerExpanded,
+                        onDismissRequest = { providerExpanded = false }
+                    ) {
+                        availableProviders.forEach { provider ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(provider.name)
+                                        Text(
+                                            text = provider.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedProvider = try {
+                                        ModelProviderType.valueOf(provider.id)
+                                    } catch (e: Exception) {
+                                        ModelProviderType.ZHIPU
+                                    }
+                                    providerExpanded = false
+                                }
+                            )
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // 服务器配置标题
-        Text(
-            text = "服务器配置",
-            style = MaterialTheme.typography.titleMedium
-        )
+        // 模型选择
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "选择模型",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = modelExpanded,
+                    onExpandedChange = { modelExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedModelInfo?.name ?: selectedModel,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = modelExpanded,
+                        onDismissRequest = { modelExpanded = false }
+                    ) {
+                        availableModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(model.name)
+                                        Text(
+                                            text = model.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedModel = model.id
+                                    modelExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // API Key 输入框
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text("API Key") },
+                    placeholder = {
+                        Text(
+                            when (selectedProvider) {
+                                ModelProviderType.ZHIPU -> "智谱 API Key"
+                                ModelProviderType.ALIBABA -> "阿里云百炼 API Key"
+                                ModelProviderType.OPENAI -> "OpenAI API Key"
+                                else -> "API Key"
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 自定义模型 ID 输入框
+                OutlinedTextField(
+                    value = customModelId,
+                    onValueChange = { customModelId = it },
+                    label = { Text("自定义模型 ID（可选）") },
+                    placeholder = { Text("例如: glm-4-custom") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 服务器地址
-        OutlinedTextField(
-            value = baseUrl,
-            onValueChange = { baseUrl = it },
-            label = { Text("服务器地址") },
-            placeholder = { Text("http://192.168.1.100:2024") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+        // 执行参数卡片
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "执行参数",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 最大迭代次数
+                OutlinedTextField(
+                    value = maxIterations,
+                    onValueChange = { maxIterations = it },
+                    label = { Text("最大迭代次数") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 迭代延迟
+                OutlinedTextField(
+                    value = iterationDelay,
+                    onValueChange = { iterationDelay = it },
+                    label = { Text("迭代延迟（毫秒）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 最大历史消息数
+                OutlinedTextField(
+                    value = maxHistoryMessages,
+                    onValueChange = { maxHistoryMessages = it },
+                    label = { Text("最大历史消息数") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 移除图片轮次
+                OutlinedTextField(
+                    value = removeImagesAfterRounds,
+                    onValueChange = { removeImagesAfterRounds = it },
+                    label = { Text("N 轮后移除图片（节省 token）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Assistant ID
-        OutlinedTextField(
-            value = assistantId,
-            onValueChange = { assistantId = it },
-            label = { Text("Assistant ID") },
-            placeholder = { Text("intelligent_deep_agent_mobile") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+        // 功能开关卡片
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "功能开关",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+                // 自动截屏
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("自动截屏")
+                        Text(
+                            text = "每次操作后自动截屏发送给 AI",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoCaptureScreenshot,
+                        onCheckedChange = { autoCaptureScreenshot = it }
+                    )
+                }
 
-        // 超时时间
-        OutlinedTextField(
-            value = timeoutSeconds,
-            onValueChange = { timeoutSeconds = it },
-            label = { Text("超时时间（秒）") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 思考模式
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("思考模式")
+                        Text(
+                            text = "启用智谱的推理思考过程",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = enableThinking,
+                        onCheckedChange = { enableThinking = it }
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -288,9 +471,16 @@ fun SettingsScreen(
             onClick = {
                 try {
                     val newConfig = AgentConfig(
-                        baseUrl = baseUrl,
-                        assistantId = assistantId,
-                        timeoutSeconds = timeoutSeconds.toIntOrNull() ?: 60
+                        modelProvider = selectedProvider.name,
+                        model = selectedModel,
+                        customModelId = customModelId.trim(),
+                        apiKey = apiKey.trim(),
+                        maxIterations = maxIterations.toIntOrNull() ?: 10,
+                        iterationDelayMs = iterationDelay.toLongOrNull() ?: 1000,
+                        autoCaptureScreenshot = autoCaptureScreenshot,
+                        enableThinking = enableThinking,
+                        maxHistoryMessages = maxHistoryMessages.toIntOrNull() ?: 20,
+                        removeImagesAfterRounds = removeImagesAfterRounds.toIntOrNull() ?: 3
                     )
                     onConfigChanged(newConfig)
                     saveConfig(context, newConfig)
@@ -320,12 +510,63 @@ fun SettingsScreen(
 
         Text(
             text = "说明：\n" +
-                    "1. 服务器地址：LangGraph Server 的 URL\n" +
-                    "2. Assistant ID：你的 Agent 名称，可从 /assistants 端点获取\n" +
-                    "3. 超时时间：网络请求超时时间（秒）",
+                    "1. 模型：推荐 glm-4-flash（免费），需要图片理解用 glm-4v-flash\n" +
+                    "2. 最大迭代次数：任务执行的最大轮次，防止无限循环\n" +
+                    "3. N 轮后移除图片：节省 token 用量，图片过几轮后会被移除\n" +
+                    "4. 自动截屏：关闭后可减少 API 调用次数",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    subtitle: String? = null,
+    status: String?,
+    isEnabled: Boolean,
+    buttonText: String?,
+    onButtonClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
+            if (status != null) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        if (buttonText != null) {
+            Button(onClick = onButtonClick) {
+                Text(buttonText)
+            }
+        } else if (isEnabled) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = "已启用",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
