@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
+import com.example.autoscreenagent.util.NotificationHelper
 
 /**
  * 简单消息气泡组件
@@ -198,8 +199,6 @@ fun AggregatedMessageBubble(
                     Text(
                         text = message.summary,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                         color = when (message.status) {
                             MessageStatus.ERROR -> MaterialTheme.colorScheme.error
@@ -234,10 +233,21 @@ fun AggregatedMessageBubble(
                             .padding(8.dp)
                     ) {
                         message.details.forEachIndexed { index, detail ->
+                            // 根据日志内容选择颜色
+                            val logColor = when {
+                                detail.contains("✅") || detail.contains("成功") -> MaterialTheme.colorScheme.primary
+                                detail.contains("❌") || detail.contains("失败") || detail.contains("错误") -> MaterialTheme.colorScheme.error
+                                detail.startsWith("执行工具:") -> MaterialTheme.colorScheme.tertiary
+                                detail.startsWith("工具结果:") -> MaterialTheme.colorScheme.onSurfaceVariant
+                                detail.startsWith("AI") -> MaterialTheme.colorScheme.secondary
+                                detail.contains("=== 第") -> MaterialTheme.colorScheme.outline
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
                             Text(
                                 text = detail,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = logColor,
                                 modifier = Modifier.padding(vertical = 2.dp)
                             )
                             if (index < message.details.lastIndex) {
@@ -373,6 +383,11 @@ fun ChatScreen(
                         )
                         appViewModel.setAgentRunning(false)
                         appViewModel.setAgentStatus("就绪")
+
+                        // 如果应用在后台，发送通知
+                        if (NotificationHelper.isAppInBackground(context)) {
+                            NotificationHelper.showTaskCompletedNotification(context, state.message)
+                        }
                     }
                     is AgentState.Failed -> {
                         appViewModel.completeAggregatedMessage(

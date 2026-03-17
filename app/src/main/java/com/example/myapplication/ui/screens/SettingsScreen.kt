@@ -28,6 +28,7 @@ import com.example.autoscreenagent.data.remote.AgentConfig
 import com.example.autoscreenagent.data.remote.ModelOption
 import com.example.autoscreenagent.data.remote.model.ModelProviderType
 import com.example.autoscreenagent.service.ScreenshotForegroundService
+import com.example.autoscreenagent.util.NotificationHelper
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -90,6 +91,14 @@ fun SettingsScreen(
                 ScreenshotForegroundService.startWithAuthorization(context, result.resultCode, data)
             }
         }
+    }
+
+    // 通知权限 (Android 13+)
+    var hasNotificationPermission by remember { mutableStateOf(NotificationHelper.hasNotificationPermission(context)) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
     }
 
     // 配置状态
@@ -191,6 +200,24 @@ fun SettingsScreen(
                     buttonText = null,
                     onButtonClick = {}
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 通知权限 (Android 13+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    PermissionRow(
+                        title = "通知权限",
+                        subtitle = "任务完成时发送通知",
+                        status = if (hasNotificationPermission) "已授权" else "未授权",
+                        isEnabled = hasNotificationPermission,
+                        buttonText = if (hasNotificationPermission) null else "授权",
+                        onButtonClick = {
+                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    )
+                }
             }
         }
 

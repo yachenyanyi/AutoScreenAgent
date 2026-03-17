@@ -16,10 +16,15 @@ import com.example.autoscreenagent.ui.screens.DebugMenuScreen
 import com.example.autoscreenagent.ui.screens.SettingsScreen
 import com.example.autoscreenagent.ui.theme.MyApplicationTheme
 import com.example.autoscreenagent.ui.viewmodel.AppViewModel
+import com.example.autoscreenagent.util.NotificationHelper
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 初始化通知渠道
+        NotificationHelper.createNotificationChannel(this)
+
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {

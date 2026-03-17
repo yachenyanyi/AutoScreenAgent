@@ -111,24 +111,74 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
+        var nodes: List<AccessibilityNodeInfo>? = null
+
         return try {
-            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            nodes = root.findAccessibilityNodeInfosByViewId(viewId)
             if (nodes.isEmpty()) {
                 return ActionResult.NotFound("id", viewId)
             }
 
-            val node = nodes.firstOrNull { it.isClickable && it.isEnabled }
-                ?: nodes.firstOrNull()
-                ?: return ActionResult.Failure("节点不可点击")
+            // 筛选可见且在屏幕内的节点
+            val visibleNodes = nodes.filter { isNodeVisible(it) }
+            if (visibleNodes.isEmpty()) {
+                Log.w(TAG, "tapById: 所有节点都不可见，节点数：${nodes.size}")
+                return ActionResult.Failure("节点不可见")
+            }
 
-            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            // 选择最佳节点：可点击 > 启用 > 面积最大
+            val node = visibleNodes
+                .sortedWith(compareByDescending<AccessibilityNodeInfo> { it.isClickable }
+                    .thenByDescending { it.isEnabled }
+                    .thenByDescending { getNodeArea(it) })
+                .first()
 
-            Log.d(TAG, "点击 ID: $viewId, 成功：$success")
+            val bounds = Rect()
+            node.getBoundsInScreen(bounds)
+
+            // 尝试 ACTION_CLICK
+            var success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            Log.d(TAG, "tapById: ACTION_CLICK 结果：$success")
+
+            // 如果失败且支持手势，尝试手势点击
+            if (!success && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Log.d(TAG, "tapById: 尝试手势点击")
+                success = tapAtCoord(bounds.centerX(), bounds.centerY()) is ActionResult.Success
+            }
+
+            Log.d(TAG, "点击 ID: $viewId, 成功：$success, bounds: $bounds")
+
             if (success) ActionResult.Success
             else ActionResult.Failure("点击失败")
         } finally {
             root.recycle()
+            nodes?.forEach { it.recycle() }
         }
+    }
+
+    /**
+     * 检查节点是否可见
+     */
+    private fun isNodeVisible(node: AccessibilityNodeInfo): Boolean {
+        // 检查 isVisibleToUser
+        if (!node.isVisibleToUser) return false
+
+        // 检查是否在屏幕内
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        if (bounds.right < 0 || bounds.bottom < 0) return false
+
+        return true
+    }
+
+    /**
+     * 获取节点面积
+     */
+    private fun getNodeArea(node: AccessibilityNodeInfo): Int {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        return bounds.width() * bounds.height()
     }
 
     /**
@@ -142,9 +192,28 @@ class ActionExecutor {
             val node = findNodeByText(root, text, 0, maxDepth)
                 ?: return ActionResult.NotFound("text", text)
 
-            val success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            // 检查节点是否可见
+            if (!isNodeVisible(node)) {
+                Log.w(TAG, "tapByText: 节点不可见")
+                node.recycle()
+                return ActionResult.Failure("节点不可见")
+            }
 
-            Log.d(TAG, "点击文本：'$text', 成功：$success")
+            val bounds = Rect()
+            node.getBoundsInScreen(bounds)
+
+            // 尝试 ACTION_CLICK
+            var success = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            Log.d(TAG, "tapByText: ACTION_CLICK 结果：$success")
+
+            // 如果失败且支持手势，尝试手势点击
+            if (!success && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Log.d(TAG, "tapByText: 尝试手势点击")
+                success = tapAtCoord(bounds.centerX(), bounds.centerY()) is ActionResult.Success
+            }
+
+            Log.d(TAG, "点击文本：'$text', 成功：$success, bounds: $bounds")
+
             if (success) ActionResult.Success
             else ActionResult.Failure("点击失败")
         } finally {
@@ -419,9 +488,17 @@ class ActionExecutor {
             val node = findNodeByText(root, text, 0, DEFAULT_MAX_DEPTH)
                 ?: return ActionResult.NotFound("text", text)
 
+            // 检查节点是否可见
+            if (!isNodeVisible(node)) {
+                Log.w(TAG, "longPressByText: 节点不可见")
+                node.recycle()
+                return ActionResult.Failure("节点不可见")
+            }
+
             val rect = Rect()
             node.getBoundsInScreen(rect)
-            node.recycle()
+
+            Log.d(TAG, "长按文本：'$text', bounds: $rect")
             longPress(rect.centerX(), rect.centerY(), duration)
         } finally {
             root.recycle()
@@ -436,19 +513,36 @@ class ActionExecutor {
         val root = service.rootInActiveWindow
             ?: return ActionResult.Failure("无法获取根节点")
 
+        var nodes: List<AccessibilityNodeInfo>? = null
+
         return try {
-            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            nodes = root.findAccessibilityNodeInfosByViewId(viewId)
             if (nodes.isEmpty()) {
                 return ActionResult.NotFound("id", viewId)
             }
 
-            val node = nodes.firstOrNull() ?: return ActionResult.Failure("节点不存在")
+            // 筛选可见节点
+            val visibleNodes = nodes.filter { isNodeVisible(it) }
+            if (visibleNodes.isEmpty()) {
+                Log.w(TAG, "longPressById: 所有节点都不可见")
+                return ActionResult.Failure("节点不可见")
+            }
+
+            // 选择最佳节点
+            val node = visibleNodes
+                .sortedWith(compareByDescending<AccessibilityNodeInfo> { it.isClickable }
+                    .thenByDescending { it.isEnabled }
+                    .thenByDescending { getNodeArea(it) })
+                .first()
+
             val rect = Rect()
             node.getBoundsInScreen(rect)
-            node.recycle()
+
+            Log.d(TAG, "长按 ID: $viewId, bounds: $rect")
             longPress(rect.centerX(), rect.centerY(), duration)
         } finally {
             root.recycle()
+            nodes?.forEach { it.recycle() }
         }
     }
 

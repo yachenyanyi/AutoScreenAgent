@@ -21,7 +21,7 @@ data class AggregatedMessage(
     val details: List<String>,         // 详细日志列表
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val isExpanded: Boolean = false,   // 是否展开显示详情
+    val isExpanded: Boolean = true,   // 是否展开显示详情（默认展开）
     val status: MessageStatus = MessageStatus.RUNNING  // 消息状态
 )
 

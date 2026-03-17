@@ -98,6 +98,7 @@ data class ScreenNodeInfo(
     val bounds: Rect,
     val isClickable: Boolean,
     val isEnabled: Boolean,
+    val isVisible: Boolean = true,  // 是否可见
     val childCount: Int,
     val depth: Int,
     val children: List<ScreenNodeInfo> = emptyList()
@@ -142,30 +143,81 @@ fun MyAccessibilityService.getScreenContent(): ScreenInfo {
     )
 }
 
+/**
+ * 检查节点是否有用（应包含在输出中）
+ */
+private fun isNodeUseful(node: AccessibilityNodeInfo): Boolean {
+    // 必须可见
+    if (!node.isVisibleToUser) return false
+
+    // 至少有一个有用属性
+    val hasText = !node.text.isNullOrBlank()
+    val hasDesc = !node.contentDescription.isNullOrBlank()
+    val hasId = !node.viewIdResourceName.isNullOrBlank()
+    val isClickable = node.isClickable && node.isEnabled
+
+    return hasText || hasDesc || hasId || isClickable
+}
+
+/**
+ * 检查节点是否在屏幕内
+ */
+private fun isNodeOnScreen(node: AccessibilityNodeInfo): Boolean {
+    val bounds = Rect()
+    node.getBoundsInScreen(bounds)
+
+    // 检查是否在屏幕外
+    if (bounds.isEmpty) return false
+    if (bounds.right < 0 || bounds.bottom < 0) return false
+
+    // 假设屏幕最大尺寸为 4000（足够覆盖所有设备）
+    if (bounds.left > 4000 || bounds.top > 4000) return false
+
+    return true
+}
+
 private fun buildNodeTree(node: AccessibilityNodeInfo, depth: Int): List<ScreenNodeInfo> {
     val result = mutableListOf<ScreenNodeInfo>()
 
     for (i in 0 until node.childCount) {
         val child = node.getChild(i) ?: continue
 
-        val bounds = Rect()
-        child.getBoundsInScreen(bounds)
+        try {
+            // 检查节点是否有用且在屏幕内
+            if (!isNodeOnScreen(child)) {
+                continue
+            }
 
-        val nodeInfo = ScreenNodeInfo(
-            text = child.text?.toString(),
-            className = child.className?.toString(),
-            packageName = child.packageName?.toString(),
-            viewId = child.viewIdResourceName,
-            contentDesc = child.contentDescription?.toString(),
-            bounds = bounds,
-            isClickable = child.isClickable,
-            isEnabled = child.isEnabled,
-            childCount = child.childCount,
-            depth = depth,
-            children = buildNodeTree(child, depth + 1)
-        )
+            val bounds = Rect()
+            child.getBoundsInScreen(bounds)
 
-        result.add(nodeInfo)
+            // 检查是否有用（可见且有内容或可点击）
+            val isUseful = isNodeUseful(child)
+            val hasUsefulChildren = child.childCount > 0
+
+            // 只保留有用的节点或包含有用子节点的节点
+            if (isUseful || hasUsefulChildren) {
+                val nodeInfo = ScreenNodeInfo(
+                    text = child.text?.toString(),
+                    className = child.className?.toString(),
+                    packageName = child.packageName?.toString(),
+                    viewId = child.viewIdResourceName,
+                    contentDesc = child.contentDescription?.toString(),
+                    bounds = bounds,
+                    isClickable = child.isClickable,
+                    isEnabled = child.isEnabled,
+                    childCount = child.childCount,
+                    depth = depth,
+                    isVisible = child.isVisibleToUser,  // 添加可见性属性
+                    children = buildNodeTree(child, depth + 1)
+                )
+
+                result.add(nodeInfo)
+            }
+        } finally {
+            // 必须回收节点，避免内存泄漏
+            child.recycle()
+        }
     }
 
     return result

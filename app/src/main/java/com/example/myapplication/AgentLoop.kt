@@ -70,8 +70,8 @@ object AgentLoop {
 $feedbackContent
 
 请根据以上执行结果，分析当前状态并返回下一步操作指令。
-如果需要获取屏幕内容（无障碍 UI 树），请使用 get_screen_content 动作。
-如果需要截屏，请使用 capture_screenshot 动作。"""
+
+"""
 
                 onLog("发送消息给 AI...")
 

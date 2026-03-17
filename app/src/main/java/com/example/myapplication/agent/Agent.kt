@@ -476,10 +476,11 @@ class Agent(
             |
             |$feedback
             |
-            |重要：
+            |重要提示：
             |1. 使用提供的工具来操作手机
-            |2. 每次操作后截屏确认结果
-            |3. 任务完成后无需使用工具
+            |2. 点击操作优先使用 tap 工具（根据截图中的视觉位置确定坐标）
+            |3. get_screen_content 仅在无法看到截图时使用
+            |4. 任务完成后无需使用工具，直接回复即可
             |
         """.trimMargin()
     }
@@ -569,8 +570,7 @@ class Agent(
             |${lastActionResults.joinToString("\n")}
             |
             |请根据以上执行结果，分析当前状态并返回下一步操作指令。
-            |如果需要获取屏幕内容，请使用 get_screen_content 动作。
-            |如果需要截屏，请使用 capture_screenshot 动作。
+
             """.trimMargin()
         } else {
             "请分析并返回下一步操作指令。"

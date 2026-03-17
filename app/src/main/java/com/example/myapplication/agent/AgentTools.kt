@@ -70,10 +70,10 @@ object AgentTools {
             ))
         ),
 
-        // 坐标点击
+        // 坐标点击（主要点击方式）
         createTool(
             name = "tap",
-            description = "点击指定坐标位置。用于点击没有文本或 ID 的元素。",
+            description = "点击指定坐标位置。这是主要的点击方式，根据截图中的视觉信息确定坐标。",
             parameters = JsonObject(mapOf(
                 "type" to JsonPrimitive("object"),
                 "properties" to JsonObject(mapOf(

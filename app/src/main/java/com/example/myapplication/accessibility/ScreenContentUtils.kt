@@ -26,6 +26,7 @@ object ScreenContentUtils {
 
     /**
      * 转换为格式化字符串（用于日志）
+     * 优化：每个节点一行，更精简
      */
     fun toFormattedString(screenInfo: ScreenInfo, maxDepth: Int = 10): String {
         val sb = StringBuilder()
@@ -66,6 +67,7 @@ object ScreenContentUtils {
             put("bounds", rectToJson(node.bounds))
             put("clickable", node.isClickable)
             put("enabled", node.isEnabled)
+            put("visible", node.isVisible)
             put("childCount", node.childCount)
             if (depth < maxDepth && node.children.isNotEmpty()) {
                 put("children", nodesToJson(node.children, depth + 1, maxDepth))
@@ -84,6 +86,10 @@ object ScreenContentUtils {
         }
     }
 
+    /**
+     * 精简格式：每个节点一行
+     * 格式：缩进 类名 "文本" [可点击] [bounds] id:xxx
+     */
     private fun appendNodeToString(
         sb: StringBuilder,
         node: ScreenNodeInfo,
@@ -93,14 +99,35 @@ object ScreenContentUtils {
         if (depth > maxDepth) return
 
         val indent = "  ".repeat(depth)
-        val clickable = if (node.isClickable) "[可点击]" else ""
-        val textInfo = node.text?.takeIf { it.isNotEmpty() }
-            ?: node.contentDesc?.takeIf { it.isNotEmpty() }
-            ?: node.className?.substringAfterLast('.') ?: "节点"
+        val cls = node.className?.substringAfterLast('.') ?: "View"
 
-        sb.appendLine("${indent}${textInfo} ${clickable}")
-        sb.appendLine("${indent}  边界：${node.bounds}")
-        sb.appendLine("${indent}  ID: ${node.viewId ?: "无"}")
+        // 构建单行格式
+        val parts = mutableListOf<String>()
+
+        // 类名
+        parts.add(cls)
+
+        // 文本或描述
+        val displayText = node.text?.takeIf { it.isNotEmpty() }
+            ?: node.contentDesc?.takeIf { it.isNotEmpty() }
+        if (displayText != null) {
+            parts.add("\"${displayText.take(30)}${if (displayText.length > 30) "..." else ""}\"")
+        }
+
+        // 可点击标识
+        if (node.isClickable && node.isEnabled) {
+            parts.add("[可点击]")
+        }
+
+        // 坐标
+        parts.add("[${node.bounds.left},${node.bounds.top}][${node.bounds.right},${node.bounds.bottom}]")
+
+        // ID（如果有）
+        if (!node.viewId.isNullOrEmpty()) {
+            parts.add("id:${node.viewId.substringAfterLast('/')}")
+        }
+
+        sb.appendLine("$indent${parts.joinToString(" ")}")
 
         for (child in node.children) {
             appendNodeToString(sb, child, depth + 1, maxDepth)
