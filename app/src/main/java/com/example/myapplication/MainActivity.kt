@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoscreenagent.ui.screens.ChatScreen
 import com.example.autoscreenagent.ui.screens.DebugMenuScreen
+import com.example.autoscreenagent.ui.screens.ModelConfigScreen
 import com.example.autoscreenagent.ui.screens.SettingsScreen
 import com.example.autoscreenagent.ui.theme.MyApplicationTheme
 import com.example.autoscreenagent.ui.viewmodel.AppViewModel
@@ -62,7 +63,18 @@ fun MainScreen(appViewModel: AppViewModel) {
                 onConfigChanged = { newConfig ->
                     appViewModel.saveConfig(newConfig)
                 },
+                onModelConfigClick = { currentScreen = Screen.ModelConfig },
                 onBack = { currentScreen = Screen.Chat }
+            )
+        }
+        is Screen.ModelConfig -> {
+            val config by appViewModel.config.collectAsState()
+            ModelConfigScreen(
+                multiProviderConfig = config.providerConfigs,
+                onConfigChanged = { newMultiConfig ->
+                    appViewModel.updateProviderConfigs(newMultiConfig)
+                },
+                onBack = { currentScreen = Screen.Settings }
             )
         }
         is Screen.Debug -> {
@@ -77,5 +89,6 @@ fun MainScreen(appViewModel: AppViewModel) {
 sealed class Screen {
     data object Chat : Screen()
     data object Settings : Screen()
+    data object ModelConfig : Screen()
     data object Debug : Screen()
 }

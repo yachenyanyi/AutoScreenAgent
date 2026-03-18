@@ -37,7 +37,6 @@ import com.example.autoscreenagent.accessibility.ScreenshotManager
 import com.example.autoscreenagent.ai.CommandExecutor
 import com.example.autoscreenagent.agent.Agent
 import com.example.autoscreenagent.agent.AgentState
-import com.example.autoscreenagent.data.remote.LangGraphClient
 import com.example.autoscreenagent.ui.viewmodel.AppViewModel
 import com.example.autoscreenagent.ui.viewmodel.MessageItem
 import kotlinx.coroutines.launch
@@ -343,11 +342,11 @@ fun ChatScreen(
         }
     }
 
-    val langGraphClient = remember { appViewModel.getLangGraphClient() }
     val commandExecutor = remember { CommandExecutor(context) }
 
-    // 服务器连接状态
-    val connected by appViewModel.isConnected.collectAsState()
+    // API 配置状态
+    val config by appViewModel.config.collectAsState()
+    val isApiConfigured = config.isCurrentProviderConfigured()
 
     // 滚动到最新消息
     LaunchedEffect(messages.size) {
@@ -470,8 +469,8 @@ fun ChatScreen(
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
                             StatusIndicator(
-                                isConnected = connected,
-                                label = if (connected) "已连接" else "未连接"
+                                isConnected = isApiConfigured,
+                                label = if (isApiConfigured) "API 已配置" else "未配置 API"
                             )
                             StatusIndicator(
                                 isConnected = isAccessibilityEnabled,

@@ -42,6 +42,7 @@ import kotlinx.serialization.json.Json
 fun SettingsScreen(
     config: AgentConfig,
     onConfigChanged: (AgentConfig) -> Unit,
+    onModelConfigClick: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -105,7 +106,6 @@ fun SettingsScreen(
     var selectedProvider by remember { mutableStateOf(config.getProviderType()) }
     var selectedModel by remember { mutableStateOf(config.model) }
     var customModelId by remember { mutableStateOf(config.customModelId) }
-    var apiKey by remember { mutableStateOf(config.apiKey) }
     var maxIterations by remember { mutableStateOf(config.maxIterations.toString()) }
     var iterationDelay by remember { mutableStateOf(config.iterationDelayMs.toString()) }
     var autoCaptureScreenshot by remember { mutableStateOf(config.autoCaptureScreenshot) }
@@ -218,6 +218,48 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 模型配置入口卡片
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onModelConfigClick
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "模型配置",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "配置各厂商 API Key 和参数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    // 显示已配置的厂商数量
+                    val configuredCount = config.providerConfigs.getConfiguredProviders().size
+                    if (configuredCount > 0) {
+                        Text(
+                            text = "已配置 $configuredCount 个厂商",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "进入配置"
+                )
             }
         }
 
@@ -341,28 +383,6 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // API Key 输入框
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
-                    placeholder = {
-                        Text(
-                            when (selectedProvider) {
-                                ModelProviderType.ZHIPU -> "智谱 API Key"
-                                ModelProviderType.ALIBABA -> "阿里云百炼 API Key"
-                                ModelProviderType.OPENAI -> "OpenAI API Key"
-                                else -> "API Key"
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
                 // 自定义模型 ID 输入框
                 OutlinedTextField(
                     value = customModelId,
@@ -372,6 +392,24 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                // 当前厂商配置状态提示
+                val currentProviderConfig = config.getCurrentProviderConfig()
+                if (currentProviderConfig.hasApiKey()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "✓ 当前厂商已配置 API Key",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "⚠ 当前厂商未配置 API Key，请前往模型配置",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
 
@@ -501,13 +539,13 @@ fun SettingsScreen(
                         modelProvider = selectedProvider.name,
                         model = selectedModel,
                         customModelId = customModelId.trim(),
-                        apiKey = apiKey.trim(),
                         maxIterations = maxIterations.toIntOrNull() ?: 10,
                         iterationDelayMs = iterationDelay.toLongOrNull() ?: 1000,
                         autoCaptureScreenshot = autoCaptureScreenshot,
                         enableThinking = enableThinking,
                         maxHistoryMessages = maxHistoryMessages.toIntOrNull() ?: 20,
-                        removeImagesAfterRounds = removeImagesAfterRounds.toIntOrNull() ?: 3
+                        removeImagesAfterRounds = removeImagesAfterRounds.toIntOrNull() ?: 3,
+                        providerConfigs = config.providerConfigs  // 保持原有的多厂商配置
                     )
                     onConfigChanged(newConfig)
                     saveConfig(context, newConfig)

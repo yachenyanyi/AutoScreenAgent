@@ -1,42 +1,37 @@
 package com.example.autoscreenagent.data.remote
 
+import com.example.autoscreenagent.data.remote.model.ModelProvider
 import com.example.autoscreenagent.data.remote.model.ModelProviderType
+import com.example.autoscreenagent.data.remote.model.MultiProviderConfig
 import kotlinx.serialization.Serializable
 
 /**
  * Agent 配置（支持多厂商模型）
  *
  * @param modelProvider  模型厂商类型
- * @param model 模型选择
+ * @param model 模型选择（为空时使用厂商默认模型）
  * @param customModelId  用户自定义模型 ID
- * @param apiKey API Key
  * @param maxIterations 最大迭代次数
  * @param iterationDelayMs 迭代延迟（毫秒）
  * @param autoCaptureScreenshot 自动截屏
  * @param enableThinking 思考模式
  * @param maxHistoryMessages 最大历史消息数
  * @param removeImagesAfterRounds N 轮后移除图片
- * @param baseUrl LangGraph Server 地址（保留兼容）
- * @param assistantId Assistant ID（保留兼容）
- * @param timeoutSeconds 超时时间（保留兼容）
+ * @param providerConfigs 多厂商配置
  */
 @Serializable
 data class AgentConfig(
     val modelProvider: String = ModelProviderType.ZHIPU.name,  // 厂商类型
-    val model: String = "glm-4-flash",
-    val customModelId: String = "1e8a6cfac706451b9469bc688cf62d9e.c5dWK5HbbFgc1vFr",  // 用户自定义模型 ID
-    val apiKey: String = "",  // API Key
+    val model: String = "",  // 当前使用的模型（为空时使用厂商默认）
+    val customModelId: String = "",  // 用户自定义模型 ID
     val maxIterations: Int = 10,
     val iterationDelayMs: Long = 1000,
     val autoCaptureScreenshot: Boolean = true,
     val enableThinking: Boolean = true,
     val maxHistoryMessages: Int = 20,
     val removeImagesAfterRounds: Int = 3,
-    // 保留兼容字段（LangGraph）
-    val baseUrl: String = "",
-    val assistantId: String = "",
-    val timeoutSeconds: Int = 60,
-    val maxRetries: Int = 3
+    // 多厂商配置
+    val providerConfigs: MultiProviderConfig = MultiProviderConfig()
 ) {
     /**
      * 获取厂商类型
@@ -47,6 +42,25 @@ data class AgentConfig(
         } catch (e: Exception) {
             ModelProviderType.ZHIPU
         }
+    }
+
+    /**
+     * 获取当前厂商的配置
+     */
+    fun getCurrentProviderConfig() = providerConfigs.getProviderConfig(getProviderType().toModelProvider())
+
+    /**
+     * 获取当前使用的模型（优先使用指定的模型，否则使用厂商默认）
+     */
+    fun getCurrentModel(): String {
+        return model.ifBlank { getCurrentProviderConfig().defaultModel }
+    }
+
+    /**
+     * 检查当前厂商是否已配置
+     */
+    fun isCurrentProviderConfigured(): Boolean {
+        return providerConfigs.isConfigured(getProviderType().toModelProvider())
     }
 
     companion object {

@@ -1,8 +1,8 @@
 package com.example.autoscreenagent.agent
 
 import com.example.autoscreenagent.ai.ExecutableAction
-import com.example.autoscreenagent.data.remote.zhipu.Tool
-import com.example.autoscreenagent.data.remote.zhipu.ToolFunction
+import com.example.autoscreenagent.data.remote.model.Tool
+import com.example.autoscreenagent.data.remote.model.ToolFunction
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
