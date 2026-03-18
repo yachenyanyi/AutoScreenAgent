@@ -14,10 +14,9 @@ import kotlinx.serialization.Serializable
  * @param maxIterations 最大迭代次数
  * @param iterationDelayMs 迭代延迟（毫秒）
  * @param autoCaptureScreenshot 自动截屏
- * @param enableThinking 思考模式
  * @param maxHistoryMessages 最大历史消息数
  * @param removeImagesAfterRounds N 轮后移除图片
- * @param providerConfigs 多厂商配置
+ * @param providerConfigs 多厂商配置（每个厂商有独立的 enableThinking 设置）
  */
 @Serializable
 data class AgentConfig(
@@ -27,7 +26,6 @@ data class AgentConfig(
     val maxIterations: Int = 10,
     val iterationDelayMs: Long = 1000,
     val autoCaptureScreenshot: Boolean = true,
-    val enableThinking: Boolean = true,
     val maxHistoryMessages: Int = 20,
     val removeImagesAfterRounds: Int = 3,
     // 多厂商配置

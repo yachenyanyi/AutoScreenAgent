@@ -109,7 +109,6 @@ fun SettingsScreen(
     var maxIterations by remember { mutableStateOf(config.maxIterations.toString()) }
     var iterationDelay by remember { mutableStateOf(config.iterationDelayMs.toString()) }
     var autoCaptureScreenshot by remember { mutableStateOf(config.autoCaptureScreenshot) }
-    var enableThinking by remember { mutableStateOf(config.enableThinking) }
     var maxHistoryMessages by remember { mutableStateOf(config.maxHistoryMessages.toString()) }
     var removeImagesAfterRounds by remember { mutableStateOf(config.removeImagesAfterRounds.toString()) }
 
@@ -504,10 +503,8 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(8.dp))
 
-                // 思考模式
+                // 思考模式提示
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -516,15 +513,14 @@ fun SettingsScreen(
                     Column {
                         Text("思考模式")
                         Text(
-                            text = "启用智谱的推理思考过程",
+                            text = "请在「模型配置」中为各厂商单独设置",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = enableThinking,
-                        onCheckedChange = { enableThinking = it }
-                    )
+                    TextButton(onClick = onModelConfigClick) {
+                        Text("去设置")
+                    }
                 }
             }
         }
@@ -542,7 +538,6 @@ fun SettingsScreen(
                         maxIterations = maxIterations.toIntOrNull() ?: 10,
                         iterationDelayMs = iterationDelay.toLongOrNull() ?: 1000,
                         autoCaptureScreenshot = autoCaptureScreenshot,
-                        enableThinking = enableThinking,
                         maxHistoryMessages = maxHistoryMessages.toIntOrNull() ?: 20,
                         removeImagesAfterRounds = removeImagesAfterRounds.toIntOrNull() ?: 3,
                         providerConfigs = config.providerConfigs  // 保持原有的多厂商配置
