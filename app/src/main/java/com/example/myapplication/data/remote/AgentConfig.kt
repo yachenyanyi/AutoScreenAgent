@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
 data class AgentConfig(
     val modelProvider: String = ModelProviderType.ZHIPU.name,  // 厂商类型
     val model: String = "glm-4-flash",
-    val customModelId: String = "",  // 用户自定义模型 ID
+    val customModelId: String = "1e8a6cfac706451b9469bc688cf62d9e.c5dWK5HbbFgc1vFr",  // 用户自定义模型 ID
     val apiKey: String = "",  // API Key
     val maxIterations: Int = 10,
     val iterationDelayMs: Long = 1000,

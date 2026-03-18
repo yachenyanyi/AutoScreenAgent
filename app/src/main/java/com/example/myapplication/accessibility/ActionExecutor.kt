@@ -106,6 +106,9 @@ class ActionExecutor {
 
     /**
      * 按 ID 点击
+     * 支持两种格式：
+     * - 完整格式：com.tencent.mobileqq:id/ivTitleBtnLeft
+     * - 简短格式：ivTitleBtnLeft（自动补全包名）
      */
     fun tapById(viewId: String): ActionResult {
         val root = service.rootInActiveWindow
@@ -114,7 +117,21 @@ class ActionExecutor {
         var nodes: List<AccessibilityNodeInfo>? = null
 
         return try {
-            nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            // 如果是简短 ID（不包含 : 或 /），尝试补全
+            val fullViewId = if (!viewId.contains(":") && !viewId.contains("/")) {
+                val packageName = root.packageName?.toString() ?: ""
+                "$packageName:id/$viewId"
+            } else {
+                viewId
+            }
+
+            Log.d(TAG, "tapById: 原始 ID=$viewId, 补全后=$fullViewId")
+
+            nodes = root.findAccessibilityNodeInfosByViewId(fullViewId)
+            if (nodes.isEmpty()) {
+                // 尝试使用原始 ID 查找
+                nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            }
             if (nodes.isEmpty()) {
                 return ActionResult.NotFound("id", viewId)
             }
@@ -507,6 +524,7 @@ class ActionExecutor {
 
     /**
      * 长按 ID
+     * 支持简短 ID 自动补全包名
      */
     @RequiresApi(Build.VERSION_CODES.N)
     fun longPressById(viewId: String, duration: Long = 500): ActionResult {
@@ -516,7 +534,18 @@ class ActionExecutor {
         var nodes: List<AccessibilityNodeInfo>? = null
 
         return try {
-            nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            // 如果是简短 ID（不包含 : 或 /），尝试补全
+            val fullViewId = if (!viewId.contains(":") && !viewId.contains("/")) {
+                val packageName = root.packageName?.toString() ?: ""
+                "$packageName:id/$viewId"
+            } else {
+                viewId
+            }
+
+            nodes = root.findAccessibilityNodeInfosByViewId(fullViewId)
+            if (nodes.isEmpty()) {
+                nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            }
             if (nodes.isEmpty()) {
                 return ActionResult.NotFound("id", viewId)
             }

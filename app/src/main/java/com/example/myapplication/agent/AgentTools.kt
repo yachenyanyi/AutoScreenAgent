@@ -57,7 +57,7 @@ object AgentTools {
         // 输入文本
         createTool(
             name = "type_text",
-            description = "在当前聚焦的输入框中输入文本。如果需要先点击输入框，请使用 tap_by_text 或 tap 工具。",
+            description = "在当前聚焦的输入框中输入文本。如果需要先点击输入框，请使用 tap_by_text 或 tap_by_id 工具。",
             parameters = JsonObject(mapOf(
                 "type" to JsonPrimitive("object"),
                 "properties" to JsonObject(mapOf(
@@ -70,10 +70,10 @@ object AgentTools {
             ))
         ),
 
-        // 坐标点击（主要点击方式）
+        // 坐标点击（备选方案，仅在 tap_by_text 和 tap_by_id 都无法使用时使用）
         createTool(
             name = "tap",
-            description = "点击指定坐标位置。这是主要的点击方式，根据截图中的视觉信息确定坐标。",
+            description = "点击指定坐标位置。这是备选点击方式，仅当 tap_by_text 和 tap_by_id 都找不到目标时使用。",
             parameters = JsonObject(mapOf(
                 "type" to JsonPrimitive("object"),
                 "properties" to JsonObject(mapOf(
