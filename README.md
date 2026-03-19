@@ -1,143 +1,136 @@
-# AutoScreenAgent - AI 手机助手
+# AutoScreenAgent - AI 手机自动化助手
 
-一个基于 LangGraph 的 Android AI 助手应用，可以通过语音/文字指令自动控制手机屏幕操作。
+一个基于 AI 大模型的 Android 自动化助手应用，通过自然语言指令自动控制手机屏幕操作。
 
-## 功能特性
+## ✨ 功能特性
 
-### 核心功能
-- **AI 对话界面** - 自然语言交互，输入任务目标即可自动执行
-- **智能屏幕操作** - 基于 AI 分析自动执行点击、滑动、输入等操作
-- **实时状态反馈** - 执行过程和结果以聊天气泡形式展示
-- **流式响应** - 支持 SSE 流式接收 AI 响应，实时显示 AI 思考过程
+### 🤖 多厂商 AI 支持
+- **智谱 GLM** - 支持 GLM-4.6v-flash、GLM-4-Plus 等模型
+- **通义千问** - 支持 Qwen-VL-Max 等视觉模型
+- **OpenAI** - 支持 GPT-4o 等模型
+- **自定义接口** - 支持兼容 OpenAI 格式的自定义服务
 
-### 权限管理
-- **无障碍服务** - 自动识别并操作屏幕元素（文本、ID、坐标等）
-- **截屏授权** - MediaProjection 截屏，支持将屏幕图像发送给 AI 分析
+### 🎯 智能屏幕操作
+- **自然语言控制** - 输入任务目标，AI 自动分析并执行
+- **视觉理解** - 通过截屏分析界面内容
+- **智能定位** - 支持文本、ID、坐标多种定位方式
+- **丰富工具集** - 点击、滑动、输入、启动应用等
 
-### 设置与调试
-- **服务器配置** - 自定义 LangGraph Server 地址和 Assistant ID
-- **状态指示器** - 实时显示服务器连接、无障碍服务、截屏授权状态
-- **调试菜单** - 提供快速测试和日志查看功能
+### 🔧 工具列表
 
-## 技术架构
+| 工具 | 功能 | 参数 |
+|------|------|------|
+| `tap_by_text` | 点击文本 | text, exact |
+| `tap_by_id` | 点击元素ID | viewId |
+| `tap` | 点击坐标 | element |
+| `type_text` | 输入文本 | text |
+| `swipe` | 滑动 | direction |
+| `longpress` | 长按 | element |
+| `launch_app` | 启动应用 | packageName |
+| `back` | 返回键 | - |
+| `home` | 主页键 | - |
+| `get_screen_content` | 获取屏幕内容 | - |
+| `get_installed_apps` | 获取已安装应用 | keyword, includeSystem, limit |
 
-```
-app/src/main/java/com/example/myapplication/
-├── accessibility/          # 无障碍服务模块
-│   ├── AccessibilityManager.kt
-│   ├── MyAccessibilityService.kt
-│   ├── ActionExecutor.kt
-│   ├── CoordinateExecutor.kt
-│   ├── ScreenshotManager.kt
-│   └── ...
-├── ai/                     # AI 命令处理
-│   ├── AIResponseParser.kt
-│   └── CommandExecutor.kt
-├── data/remote/            # 数据层
-│   ├── AgentConfig.kt
-│   ├── LangGraphClient.kt
-│   └── api/
-├── ui/                     # UI 层
-│   ├── screens/
-│   ├── theme/
-│   └── viewmodel/
-├── service/                # 后台服务
-└── util/                   # 工具类
-```
+## 📱 快速开始
 
-## 快速开始
+### 环境要求
+- Android 8.0 (API 26) 及以上
+- 需要开启无障碍服务
+- 需要授权截屏权限
 
-### 1. 构建与安装
+### 构建与安装
 
 ```bash
 # 克隆项目
 git clone https://github.com/yachenyanyi/AutoScreenAgent.git
 
-# 使用 Android Studio 打开项目
-# 或命令行构建
+# 构建
 ./gradlew assembleDebug
 
-# 安装到设备
+# 安装
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 2. 环境要求
-- Android 8.0 (API 26) 及以上
-- 需要开启无障碍服务
-- 需要授权截屏权限
+### 使用方法
 
-### 3. 配置 LangGraph Server
+1. **配置 AI 模型**
+   - 进入设置页面
+   - 选择 AI 厂商（智谱/通义/OpenAI/自定义）
+   - 配置 API Key 和模型
 
-在设置页面配置：
-- **服务器地址**: LangGraph Server 的 URL (如 `http://192.168.1.100:2024`)
-- **Assistant ID**: 你的 Agent 名称 (如 `intelligent_deep_agent_mobile`)
-- **超时时间**: 网络请求超时时间（秒）
+2. **开启权限**
+   - 开启无障碍服务
+   - 授权截屏权限
 
-### 4. 使用方法
+3. **开始使用**
+   - 在主页输入任务目标
+   - 点击发送，AI 自动执行
 
-1. 打开应用，进入设置页面配置服务器地址
-2. 返回主页，开启无障碍服务和截屏授权
-3. 在底部输入框输入任务目标（如"打开微信"）
-4. 点击发送，AI 将自动分析并执行操作
-5. 执行过程和结果会显示在聊天窗口中
+## 🏗️ 技术架构
 
-## AI 命令格式
-
-应用支持以下 AI 返回的命令格式：
-
-| 命令类型 | 说明 | 示例 |
-|---------|------|------|
-| `tap_by_text` | 点击文本元素 | `{"action": "tap_by_text", "params": {"text": "发送"}}` |
-| `tap_by_id` | 点击 ID 元素 | `{"action": "tap_by_id", "params": {"viewId": "com.example:id/btn_send"}}` |
-| `type_text` | 输入文本 | `{"action": "type_text", "params": {"text": "你好"}}` |
-| `tap` | 点击坐标 | `{"action": "tap", "element": [180, 600]}` |
-| `swipe` | 滑动 | `{"action": "swipe", "params": {"direction": "up"}}` |
-| `back` | 返回 | `{"action": "back"}` |
-| `home` | 回到主页 | `{"action": "home"}` |
-| `launch_app` | 启动应用 | `{"action": "launch_app", "text": "com.tencent.mm"}` |
-| `finish` | 任务完成 | `{"action": "finish", "text": "任务已完成"}` |
-
-## 项目说明
-
-### 主要组件
-
-- **MainActivity.kt** - 主界面，包含 AI 对话 UI
-- **SettingsScreen.kt** - 设置页面，权限管理和服务器配置
-- **LangGraphClient.kt** - LangGraph API 客户端，支持流式响应
-- **AIResponseParser.kt** - AI 响应解析器，解析 JSON 格式的行动指令
-- **CommandExecutor.kt** - 命令执行器，将 AI 指令转换为实际操作
-- **AccessibilityManager.kt** - 无障碍服务管理器
-
-### 通信协议
-
-应用通过 HTTP 与 LangGraph Server 通信：
-- 创建线程：`POST /threads`
-- 流式发送：`POST /threads/{thread_id}/runs/stream`
-- 健康检查：`GET /`
-
-## 开发调试
-
-### 测试 AI 响应
-
-使用 `test_ai_response.py` 脚本测试 LangGraph Server 的响应：
-
-```bash
-python3 test_ai_response.py
+```
+app/src/main/java/com/example/myapplication/
+├── accessibility/          # 无障碍服务
+│   ├── AccessibilityManager.kt
+│   ├── MyAccessibilityService.kt
+│   ├── ActionExecutor.kt
+│   └── ScreenshotManager.kt
+├── agent/                  # Agent 核心
+│   ├── Agent.kt            # Agent 主循环
+│   └── AgentTools.kt       # 工具定义
+├── ai/                     # AI 模型层
+│   ├── ActionModels.kt     # 模型接口
+│   ├── ChatModelFactory.kt # 模型工厂
+│   ├── CommandExecutor.kt  # 命令执行
+│   └── model/              # 各厂商实现
+│       ├── ZhipuChatModel.kt
+│       ├── QwenChatModel.kt
+│       └── OpenAIChatModel.kt
+├── data/remote/            # 数据配置
+│   └── AgentConfig.kt      # 配置管理
+└── ui/                     # UI 层
+    ├── screens/
+    └── viewmodel/
 ```
 
-### 调试菜单
+### 核心流程
 
-点击顶部栏的 🔧 图标进入调试菜单，提供：
-- 快速测试（Home、Back、启动应用）
-- 屏幕内容获取
-- 截屏测试
-- 调试日志查看
+```
+用户输入 → AI 分析 → 工具调用 → 执行操作 → 获取屏幕反馈 → 循环直至完成
+```
 
-## 许可证
+## ⚙️ 配置说明
 
-本项目采用 MIT 许可证
+### 厂商配置
 
-## 鸣谢
+| 厂商 | API 地址 | 默认模型 |
+|------|----------|----------|
+| 智谱 GLM | open.bigmodel.cn | glm-4.6v-flash |
+| 通义千问 | dashscope.aliyuncs.com | qwen-vl-max |
+| OpenAI | api.openai.com | gpt-4o |
+| 自定义 | 自定义 | 自定义 |
 
-- [LangGraph](https://github.com/langchain-ai/langgraph) - AI Agent 框架
+### Agent 配置
+
+- **最大迭代次数**: Agent 执行循环的最大次数
+- **迭代间隔**: 每轮操作之间的等待时间
+- **历史消息数**: 保留的对话历史条数
+
+## 🔐 权限说明
+
+| 权限 | 用途 |
+|------|------|
+| 无障碍服务 | 模拟点击、滑动、输入等操作 |
+| 截屏权限 | 获取屏幕图像供 AI 分析 |
+| 网络权限 | 调用 AI API |
+
+## 📄 许可证
+
+MIT License
+
+## 🙏 鸣谢
+
 - [Jetpack Compose](https://developer.android.com/jetpack/compose) - 现代化 UI 框架
+- [OkHttp](https://square.github.io/okhttp/) - 网络请求库
+- [Kotlinx Serialization](https://github.com/Kotlin/kotlinx.serialization) - JSON 序列化
