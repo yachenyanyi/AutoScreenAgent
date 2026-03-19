@@ -220,6 +220,30 @@ object AgentTools {
                 "properties" to JsonObject(mapOf()),
                 "required" to JsonArray(listOf())
             ))
+        ),
+
+        // 获取已安装应用列表
+        createTool(
+            name = "get_installed_apps",
+            description = "获取手机上已安装的应用列表，返回应用名称和包名。用于查找想要启动的应用的包名，配合 launch_app 工具使用。支持按关键词过滤、排除系统应用、限制返回数量。",
+            parameters = JsonObject(mapOf(
+                "type" to JsonPrimitive("object"),
+                "properties" to JsonObject(mapOf(
+                    "filter" to JsonObject(mapOf(
+                        "type" to JsonPrimitive("string"),
+                        "description" to JsonPrimitive("过滤关键词，匹配应用名称或包名（可选）")
+                    )),
+                    "include_system" to JsonObject(mapOf(
+                        "type" to JsonPrimitive("boolean"),
+                        "description" to JsonPrimitive("是否包含系统应用，默认 false")
+                    )),
+                    "limit" to JsonObject(mapOf(
+                        "type" to JsonPrimitive("integer"),
+                        "description" to JsonPrimitive("返回数量限制，默认 50")
+                    ))
+                )),
+                "required" to JsonArray(listOf())
+            ))
         )
     )
 
@@ -312,6 +336,13 @@ object AgentTools {
             "capture_screenshot" -> ExecutableAction.CaptureScreenshot
 
             "get_screen_content" -> ExecutableAction.GetScreenContent
+
+            "get_installed_apps" -> {
+                val filter = args.optString("filter", "").ifBlank { null }
+                val includeSystem = args.optBoolean("include_system", false)
+                val limit = args.optInt("limit", 50)
+                ExecutableAction.GetInstalledApps(filter, includeSystem, limit)
+            }
 
             else -> null
         }

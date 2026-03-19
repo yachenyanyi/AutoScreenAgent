@@ -124,8 +124,10 @@ fun SettingsScreen(
 
     // 当厂商变化时，重置模型选择
     LaunchedEffect(selectedProvider) {
+        // 重新计算可用模型列表
+        val newAvailableModels = AgentConfig.getAvailableModels(selectedProvider, customModelId)
         val defaultModel = AgentConfig.getDefaultModel(selectedProvider)
-        val hasModel = availableModels.any { it.id == selectedModel }
+        val hasModel = newAvailableModels.any { it.id == selectedModel }
         if (!hasModel) {
             selectedModel = defaultModel
         }
@@ -174,21 +176,21 @@ fun SettingsScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 截屏服务
-                PermissionRow(
-                    title = "截屏服务",
-                    status = if (isScreenshotAuthorized) "已授权" else "未授权",
-                    isEnabled = isScreenshotAuthorized,
-                    buttonText = if (isScreenshotAuthorized) null else "授权",
-                    onButtonClick = {
-                        val intent = ScreenshotManager.getMediaProjectionIntent(context)
-                        screenshotActivityLauncher.launch(intent)
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(12.dp))
+                // 截屏服务 - 已隐藏
+                // PermissionRow(
+                //     title = "截屏服务",
+                //     status = if (isScreenshotAuthorized) "已授权" else "未授权",
+                //     isEnabled = isScreenshotAuthorized,
+                //     buttonText = if (isScreenshotAuthorized) null else "授权",
+                //     onButtonClick = {
+                //         val intent = ScreenshotManager.getMediaProjectionIntent(context)
+                //         screenshotActivityLauncher.launch(intent)
+                //     }
+                // )
+                //
+                // Spacer(modifier = Modifier.height(12.dp))
+                // HorizontalDivider()
+                // Spacer(modifier = Modifier.height(12.dp))
 
                 // 悬浮窗
                 PermissionRow(
@@ -482,27 +484,27 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 自动截屏
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("自动截屏")
-                        Text(
-                            text = "每次操作后自动截屏发送给 AI",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = autoCaptureScreenshot,
-                        onCheckedChange = { autoCaptureScreenshot = it }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                // 自动截屏 - 已隐藏
+                // Row(
+                //     modifier = Modifier.fillMaxWidth(),
+                //     horizontalArrangement = Arrangement.SpaceBetween,
+                //     verticalAlignment = Alignment.CenterVertically
+                // ) {
+                //     Column {
+                //         Text("自动截屏")
+                //         Text(
+                //             text = "每次操作后自动截屏发送给 AI",
+                //             style = MaterialTheme.typography.bodySmall,
+                //             color = MaterialTheme.colorScheme.onSurfaceVariant
+                //         )
+                //     }
+                //     Switch(
+                //         checked = autoCaptureScreenshot,
+                //         onCheckedChange = { autoCaptureScreenshot = it }
+                //     )
+                // }
+                //
+                // Spacer(modifier = Modifier.height(8.dp))
 
                 // 思考模式提示
                 Row(

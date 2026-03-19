@@ -103,6 +103,11 @@ sealed class ExecutableAction {
     object GetScreenContent : ExecutableAction()
     object Back : ExecutableAction()
     object Home : ExecutableAction()
+    data class GetInstalledApps(
+        val filter: String? = null,
+        val includeSystem: Boolean = false,
+        val limit: Int = 50
+    ) : ExecutableAction()
     data class Finish(val message: String) : ExecutableAction()
 }
 

@@ -212,6 +212,51 @@ class CommandExecutor(private val context: Context) {
                 kotlinx.coroutines.delay(action.duration + 100L)
                 ExecuteResult.success("✅ 长按 (${action.x}, ${action.y}) ${action.duration}ms")
             }
+
+            // 获取已安装应用列表
+            is ExecutableAction.GetInstalledApps -> {
+                try {
+                    val pm = context.packageManager
+                    val allApps = pm.getInstalledApplications(android.content.pm.PackageManager.GET_META_DATA)
+
+                    // 过滤
+                    var apps = allApps
+
+                    // 过滤系统应用
+                    if (!action.includeSystem) {
+                        apps = apps.filter { it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM == 0 }
+                    }
+
+                    // 关键词过滤
+                    if (!action.filter.isNullOrBlank()) {
+                        val keyword = action.filter.lowercase()
+                        apps = apps.filter { app ->
+                            val label = pm.getApplicationLabel(app).toString().lowercase()
+                            val pkg = app.packageName.lowercase()
+                            label.contains(keyword) || pkg.contains(keyword)
+                        }
+                    }
+
+                    // 格式化
+                    val formatted = apps
+                        .map { app ->
+                            val label = pm.getApplicationLabel(app).toString()
+                            "${label} (${app.packageName})"
+                        }
+                        .sorted()
+                        .take(action.limit)
+
+                    if (formatted.isEmpty()) {
+                        ExecuteResult.failure("❌ 未找到匹配的应用")
+                    } else {
+                        val filterInfo = if (action.filter.isNullOrBlank()) "" else "（过滤: ${action.filter}）"
+                        ExecuteResult.success("✅ 已安装应用 $filterInfo（${formatted.size} 个）:\n${formatted.joinToString("\n")}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "获取应用列表失败", e)
+                    ExecuteResult.failure("❌ 获取应用列表失败: ${e.message}")
+                }
+            }
         }
     }
 

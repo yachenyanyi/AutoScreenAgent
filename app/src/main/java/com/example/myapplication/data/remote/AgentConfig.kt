@@ -68,7 +68,8 @@ data class AgentConfig(
         fun getAvailableProviders(): List<ModelOption> = listOf(
             ModelOption(ModelProviderType.ZHIPU.name, "智谱 GLM", "国内免费，快速"),
             ModelOption(ModelProviderType.ALIBABA.name, "阿里云百炼", "支持 Qwen3 思考模式"),
-            ModelOption(ModelProviderType.OPENAI.name, "OpenAI", "GPT 系列模型")
+            ModelOption(ModelProviderType.OPENAI.name, "OpenAI", "GPT 系列模型"),
+            ModelOption(ModelProviderType.CUSTOM.name, "自定义", "OpenAI 兼容接口")
         )
 
         /**
@@ -111,9 +112,9 @@ data class AgentConfig(
          */
         fun getDefaultModel(provider: ModelProviderType): String {
             return when (provider) {
-                ModelProviderType.ZHIPU -> "glm-4-flash"
-                ModelProviderType.ALIBABA -> "qwen-vl-plus"
-                ModelProviderType.OPENAI -> "gpt-4o-mini"
+                ModelProviderType.ZHIPU -> "glm-4.6v-flash"      // 与 ProviderConfig.zhipuDefault() 一致
+                ModelProviderType.ALIBABA -> "qwen-vl-plus"      // 与 ProviderConfig.qwenDefault() 一致
+                ModelProviderType.OPENAI -> "gpt-4o-mini"        // 与 ProviderConfig.openaiDefault() 一致
                 ModelProviderType.CUSTOM -> ""
             }
         }

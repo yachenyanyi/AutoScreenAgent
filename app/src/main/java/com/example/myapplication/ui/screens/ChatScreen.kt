@@ -476,10 +476,11 @@ fun ChatScreen(
                                 isConnected = isAccessibilityEnabled,
                                 label = "无障碍"
                             )
-                            StatusIndicator(
-                                isConnected = isScreenshotAuthorized,
-                                label = "截屏"
-                            )
+                            // 截屏权限状态 - 已隐藏
+                            // StatusIndicator(
+                            //     isConnected = isScreenshotAuthorized,
+                            //     label = "截屏"
+                            // )
                         }
                     }
                 },

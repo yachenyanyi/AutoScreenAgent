@@ -9,12 +9,14 @@ import com.example.autoscreenagent.data.remote.model.ChatMessage
 import com.example.autoscreenagent.data.remote.model.ChatModelRunnable
 import com.example.autoscreenagent.data.remote.model.Tool
 import com.example.autoscreenagent.data.remote.model.ToolResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * AI Agent - 通用 Agent 框架
@@ -175,11 +177,13 @@ class Agent(
 
                 onLog("发送消息给 AI...")
 
-                // 发送消息并收集响应
-                val result = if (lastScreenshotBase64 != null) {
-                    modelWithTools!!.invoke(userMessageText, lastScreenshotBase64!!)
-                } else {
-                    modelWithTools!!.invoke(userMessageText)
+                // 发送消息并收集响应（在 IO 线程执行网络请求）
+                val result = withContext(Dispatchers.IO) {
+                    if (lastScreenshotBase64 != null) {
+                        modelWithTools!!.invoke(userMessageText, lastScreenshotBase64!!)
+                    } else {
+                        modelWithTools!!.invoke(userMessageText)
+                    }
                 }
 
                 if (result.hasError()) {
