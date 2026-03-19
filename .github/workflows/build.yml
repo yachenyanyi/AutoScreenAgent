@@ -3,12 +3,11 @@ name: Build and Release APK
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'  # 推送 v 开头的 tag 时触发 (如 v1.0.0)
   pull_request:
     branches: [main]
   workflow_dispatch:  # 手动触发
-  push:
-    tags:
-      - 'v*'  # 推送 v 开头的 tag 时触发 (如 v1.0.0)
 
 jobs:
   build:
